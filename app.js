@@ -4,6 +4,10 @@ const DEVICE_KEY = "susukonnect_device_fingerprint_v1";
 const SESSION_TIMEOUT_MINUTES = 30;
 const PLATFORM_FEE_RATE = 0.015;
 const ADMIN_PAYOUT_APPROVAL_THRESHOLD = 2000;
+const RUNTIME_ERROR_TOAST_COOLDOWN_MS = 3000;
+
+let storageWarningShown = false;
+let lastRuntimeErrorToastAt = 0;
 
 const PAYOUT_REASONS = [
   "College tuition",
@@ -95,23 +99,56 @@ function attachGlobalHandlers() {
     }
   });
 
+  window.addEventListener("error", (event) => {
+    notifyRuntimeError("Runtime error", event.error || event.message);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    notifyRuntimeError("Unhandled promise rejection", event.reason);
+  });
+
   const mfaForm = document.getElementById("mfa-form");
   const mfaCancel = document.getElementById("mfa-cancel");
-  mfaForm.addEventListener("submit", handleMfaSubmit);
-  mfaCancel.addEventListener("click", () => closeMfaModal(true));
+  if (mfaForm) {
+    mfaForm.addEventListener("submit", handleMfaSubmit);
+  }
+  if (mfaCancel) {
+    mfaCancel.addEventListener("click", () => closeMfaModal(true));
+  }
 }
 
 function render() {
-  enforceSessionTimeout();
-  const user = getCurrentUser();
+  try {
+    enforceSessionTimeout();
+    const user = getCurrentUser();
 
-  if (user && !canAccessTab(user, state.activeTab)) {
-    state.activeTab = "dashboard";
+    if (user && !canAccessTab(user, state.activeTab)) {
+      state.activeTab = "dashboard";
+    }
+
+    const appMain = document.getElementById("app-main");
+    if (!appMain) {
+      return;
+    }
+    appMain.innerHTML = user ? renderApp(user) : renderAuth();
+    updateMfaModal();
+  } catch (error) {
+    notifyRuntimeError("Render failure", error);
+    const appMain = document.getElementById("app-main");
+    if (appMain) {
+      appMain.innerHTML = `
+        <section class="card">
+          <h2>Something went wrong</h2>
+          <p class="muted">
+            SusuKonnect hit an unexpected error while rendering this screen.
+            Please refresh and try again.
+          </p>
+          <div class="button-row">
+            <button class="btn-primary" onclick="window.location.reload()">Reload app</button>
+          </div>
+        </section>
+      `;
+    }
   }
-
-  const appMain = document.getElementById("app-main");
-  appMain.innerHTML = user ? renderApp(user) : renderAuth();
-  updateMfaModal();
 }
 
 function renderAuth() {
@@ -1602,62 +1639,63 @@ function handleSubmit(event) {
 
   event.preventDefault();
   touchSession();
+  withUiGuard(`Form submit: ${form.id || "unknown"}`, () => {
+    switch (form.id) {
+      case "login-form":
+        handleLogin(form);
+        return;
+      case "register-form":
+        handleRegister(form);
+        return;
+      case "create-group-form":
+        handleCreateGroup(form);
+        return;
+      case "group-filter-form":
+        handleGroupFilters(form);
+        return;
+      case "chat-form":
+        handleSendChat(form);
+        return;
+      case "kyc-form":
+        handleKycSubmit(form);
+        return;
+      case "security-settings-form":
+        handleSecuritySettings(form);
+        return;
+      case "payment-method-form":
+        handlePaymentMethod(form);
+        return;
+      case "fraud-flag-form":
+        handleFraudFlag(form);
+        return;
+      default:
+        break;
+    }
 
-  switch (form.id) {
-    case "login-form":
-      handleLogin(form);
+    if (form.classList.contains("pay-contribution-form")) {
+      handlePayContribution(form);
       return;
-    case "register-form":
-      handleRegister(form);
-      return;
-    case "create-group-form":
-      handleCreateGroup(form);
-      return;
-    case "group-filter-form":
-      handleGroupFilters(form);
-      return;
-    case "chat-form":
-      handleSendChat(form);
-      return;
-    case "kyc-form":
-      handleKycSubmit(form);
-      return;
-    case "security-settings-form":
-      handleSecuritySettings(form);
-      return;
-    case "payment-method-form":
-      handlePaymentMethod(form);
-      return;
-    case "fraud-flag-form":
-      handleFraudFlag(form);
-      return;
-    default:
-      break;
-  }
+    }
 
-  if (form.classList.contains("pay-contribution-form")) {
-    handlePayContribution(form);
-    return;
-  }
+    if (form.classList.contains("request-payout-form")) {
+      handleRequestPayout(form);
+      return;
+    }
 
-  if (form.classList.contains("request-payout-form")) {
-    handleRequestPayout(form);
-    return;
-  }
+    if (form.classList.contains("vote-form")) {
+      handleVote(form);
+      return;
+    }
 
-  if (form.classList.contains("vote-form")) {
-    handleVote(form);
-    return;
-  }
+    if (form.classList.contains("priority-claim-form")) {
+      handlePriorityClaim(form);
+      return;
+    }
 
-  if (form.classList.contains("priority-claim-form")) {
-    handlePriorityClaim(form);
-    return;
-  }
-
-  if (form.classList.contains("dispute-form")) {
-    handleDispute(form);
-  }
+    if (form.classList.contains("dispute-form")) {
+      handleDispute(form);
+    }
+  });
 }
 
 function handleClick(event) {
@@ -1668,85 +1706,86 @@ function handleClick(event) {
 
   const { action } = button.dataset;
   touchSession();
-
-  switch (action) {
-    case "switch-tab":
-      state.activeTab = button.dataset.tab;
-      render();
-      return;
-    case "logout":
-      logoutCurrentUser();
-      return;
-    case "clear-group-filters":
-      state.groupFilters = {
-        query: "",
-        community: "",
-        location: "",
-        maxContribution: "",
-        startDate: "",
-      };
-      render();
-      return;
-    case "join-group":
-      joinGroup(button.dataset.groupId);
-      return;
-    case "approve-join":
-      reviewJoinRequest(button.dataset.groupId, button.dataset.userId, "approve");
-      return;
-    case "reject-join":
-      reviewJoinRequest(button.dataset.groupId, button.dataset.userId, "reject");
-      return;
-    case "notify-pending-group":
-      sendManualReminders(button.dataset.groupId);
-      return;
-    case "approve-payout":
-      approvePayout(button.dataset.groupId, button.dataset.payoutId);
-      return;
-    case "confirm-payout-mfa":
-      confirmPayoutIdentity(button.dataset.payoutId);
-      return;
-    case "release-payout":
-      releasePayout(button.dataset.groupId, button.dataset.payoutId);
-      return;
-    case "toggle-pin-message":
-      togglePinnedMessage(button.dataset.messageId);
-      return;
-    case "mark-read":
-      markNotificationRead(button.dataset.notificationId);
-      return;
-    case "mark-all-read":
-      markAllNotificationsRead();
-      return;
-    case "remove-payment-method":
-      removePaymentMethod(button.dataset.methodId);
-      return;
-    case "remove-device":
-      removeTrustedDevice(button.dataset.deviceId);
-      return;
-    case "review-kyc":
-      reviewKyc(button.dataset.userId, button.dataset.status);
-      return;
-    case "resolve-dispute":
-      resolveDispute(button.dataset.disputeId);
-      return;
-    case "toggle-group-status":
-      toggleGroupStatus(button.dataset.groupId, button.dataset.status);
-      return;
-    case "copy-invite":
-      copyInviteLink(button.dataset.link);
-      return;
-    case "export-report":
-      exportReport(button.dataset.format);
-      return;
-    case "export-audit":
-      exportAuditLog();
-      return;
-    case "biometric-login":
-      biometricLogin();
-      return;
-    default:
-      break;
-  }
+  withUiGuard(`Click action: ${action || "unknown"}`, () => {
+    switch (action) {
+      case "switch-tab":
+        state.activeTab = button.dataset.tab;
+        render();
+        return;
+      case "logout":
+        logoutCurrentUser();
+        return;
+      case "clear-group-filters":
+        state.groupFilters = {
+          query: "",
+          community: "",
+          location: "",
+          maxContribution: "",
+          startDate: "",
+        };
+        render();
+        return;
+      case "join-group":
+        joinGroup(button.dataset.groupId);
+        return;
+      case "approve-join":
+        reviewJoinRequest(button.dataset.groupId, button.dataset.userId, "approve");
+        return;
+      case "reject-join":
+        reviewJoinRequest(button.dataset.groupId, button.dataset.userId, "reject");
+        return;
+      case "notify-pending-group":
+        sendManualReminders(button.dataset.groupId);
+        return;
+      case "approve-payout":
+        approvePayout(button.dataset.groupId, button.dataset.payoutId);
+        return;
+      case "confirm-payout-mfa":
+        confirmPayoutIdentity(button.dataset.payoutId);
+        return;
+      case "release-payout":
+        releasePayout(button.dataset.groupId, button.dataset.payoutId);
+        return;
+      case "toggle-pin-message":
+        togglePinnedMessage(button.dataset.messageId);
+        return;
+      case "mark-read":
+        markNotificationRead(button.dataset.notificationId);
+        return;
+      case "mark-all-read":
+        markAllNotificationsRead();
+        return;
+      case "remove-payment-method":
+        removePaymentMethod(button.dataset.methodId);
+        return;
+      case "remove-device":
+        removeTrustedDevice(button.dataset.deviceId);
+        return;
+      case "review-kyc":
+        reviewKyc(button.dataset.userId, button.dataset.status);
+        return;
+      case "resolve-dispute":
+        resolveDispute(button.dataset.disputeId);
+        return;
+      case "toggle-group-status":
+        toggleGroupStatus(button.dataset.groupId, button.dataset.status);
+        return;
+      case "copy-invite":
+        copyInviteLink(button.dataset.link);
+        return;
+      case "export-report":
+        exportReport(button.dataset.format);
+        return;
+      case "export-audit":
+        exportAuditLog();
+        return;
+      case "biometric-login":
+        biometricLogin();
+        return;
+      default:
+        break;
+    }
+  });
 }
 
 function handleChange(event) {
@@ -1754,11 +1793,12 @@ function handleChange(event) {
   if (!(target instanceof HTMLElement)) {
     return;
   }
-
-  if (target.id === "chat-group-select") {
-    state.selectedChatGroupId = target.value;
-    render();
-  }
+  withUiGuard(`Change event: ${target.id || "unknown"}`, () => {
+    if (target.id === "chat-group-select") {
+      state.selectedChatGroupId = target.value;
+      render();
+    }
+  });
 }
 
 function handleLogin(form) {
@@ -3026,20 +3066,26 @@ function exportAuditLog() {
 
 function handleMfaSubmit(event) {
   event.preventDefault();
-  if (!state.pendingMfa) {
-    return;
-  }
+  withUiGuard("MFA submit", () => {
+    if (!state.pendingMfa) {
+      return;
+    }
 
-  const codeInput = document.getElementById("mfa-input");
-  const code = String(codeInput.value || "").trim();
-  if (code !== state.pendingMfa.code) {
-    showToast("Invalid MFA code.", "error");
-    return;
-  }
+    const codeInput = document.getElementById("mfa-input");
+    if (!(codeInput instanceof HTMLInputElement)) {
+      showToast("MFA input is unavailable. Please retry.", "error");
+      return;
+    }
+    const code = String(codeInput.value || "").trim();
+    if (code !== state.pendingMfa.code) {
+      showToast("Invalid MFA code.", "error");
+      return;
+    }
 
-  const onSuccess = state.pendingMfa.onSuccess;
-  closeMfaModal();
-  onSuccess?.();
+    const onSuccess = state.pendingMfa.onSuccess;
+    closeMfaModal();
+    onSuccess?.();
+  });
 }
 
 function openMfaModal(purpose, onSuccess) {
@@ -3758,15 +3804,15 @@ function formatDateTime(value) {
 
 function escapeHtml(value) {
   return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function escapeCsv(value) {
-  return String(value ?? "").replaceAll('"', '""');
+  return String(value ?? "").replace(/"/g, '""');
 }
 
 function roundTwo(value) {
@@ -3805,7 +3851,7 @@ function hashValue(value) {
 }
 
 function getDeviceFingerprint() {
-  const existing = localStorage.getItem(DEVICE_KEY);
+  const existing = safeStorageGet(DEVICE_KEY);
   if (existing) {
     return existing;
   }
@@ -3816,16 +3862,16 @@ function getDeviceFingerprint() {
     Math.random().toString(36).slice(2, 10),
   ].join("|");
   const token = `dev_${hashValue(fingerprint)}_${Date.now().toString(36)}`;
-  localStorage.setItem(DEVICE_KEY, token);
+  safeStorageSet(DEVICE_KEY, token);
   return token;
 }
 
 function persistData() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data));
+  safeStorageSet(STORAGE_KEY, JSON.stringify(state.data));
 }
 
 function loadData() {
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const saved = safeStorageGet(STORAGE_KEY);
   if (!saved) {
     return createSeedData();
   }
@@ -3837,7 +3883,7 @@ function loadData() {
 }
 
 function loadSession() {
-  const saved = localStorage.getItem(SESSION_KEY);
+  const saved = safeStorageGet(SESSION_KEY);
   if (!saved) {
     return null;
   }
@@ -3849,11 +3895,82 @@ function loadSession() {
 }
 
 function saveSession(session) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  safeStorageSet(SESSION_KEY, JSON.stringify(session));
 }
 
 function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
+  safeStorageRemove(SESSION_KEY);
+}
+
+function withUiGuard(actionName, fn) {
+  try {
+    return fn();
+  } catch (error) {
+    notifyRuntimeError(actionName, error);
+    render();
+    return undefined;
+  }
+}
+
+function notifyRuntimeError(actionName, error) {
+  // Keep stack traces available for diagnostics.
+  console.error(`[SusuKonnect] ${actionName}`, error);
+  const now = Date.now();
+  if (now - lastRuntimeErrorToastAt < RUNTIME_ERROR_TOAST_COOLDOWN_MS) {
+    return;
+  }
+  lastRuntimeErrorToastAt = now;
+  if (typeof showToast === "function") {
+    showToast(
+      "Something went wrong. Please retry. If this keeps happening, refresh the app.",
+      "error"
+    );
+  }
+}
+
+function reportStorageIssue(error) {
+  console.warn("[SusuKonnect] Browser storage is unavailable.", error);
+  if (storageWarningShown) {
+    return;
+  }
+  storageWarningShown = true;
+  setTimeout(() => {
+    if (typeof showToast === "function") {
+      showToast(
+        "Browser storage is blocked. Signups may not persist until storage is enabled.",
+        "warning"
+      );
+    }
+  }, 0);
+}
+
+function safeStorageGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    reportStorageIssue(error);
+    return null;
+  }
+}
+
+function safeStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (error) {
+    reportStorageIssue(error);
+    return false;
+  }
+}
+
+function safeStorageRemove(key) {
+  try {
+    localStorage.removeItem(key);
+    return true;
+  } catch (error) {
+    reportStorageIssue(error);
+    return false;
+  }
 }
 
 function ensureDataShape(rawData) {
