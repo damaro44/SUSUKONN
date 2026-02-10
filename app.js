@@ -71,21 +71,29 @@ const state = {
 init();
 
 function init() {
-  state.data = ensureDataShape(state.data);
+  try {
+    state.data = ensureDataShape(state.data);
+  } catch (error) {
+    notifyRuntimeError("State migration failure", error);
+    state.data = ensureDataShape(createSeedData());
+    persistData();
+  }
   if (state.session && !findUserById(state.session.userId)) {
     clearSession();
     state.session = null;
   }
 
   attachGlobalHandlers();
-  synchronizeData();
+  withUiGuard("Initial data sync", () => synchronizeData());
   registerServiceWorker();
   render();
 
   setInterval(() => {
-    enforceSessionTimeout();
-    synchronizeData();
-    render();
+    withUiGuard("Background refresh", () => {
+      enforceSessionTimeout();
+      synchronizeData();
+      render();
+    });
   }, 30_000);
 }
 
@@ -233,6 +241,7 @@ function renderAuth() {
 
 function renderApp(user) {
   const tabs = TAB_CONFIG.filter((tab) => tab.roles.includes(user.role));
+  const activePanelHtml = safeRenderActivePanel(user);
   return `
     <div class="top-shell">
       <aside class="card profile-card">
@@ -270,10 +279,30 @@ function renderApp(user) {
             )
             .join("")}
         </nav>
-        <div class="panel">${renderActivePanel(user)}</div>
+        <div class="panel">${activePanelHtml}</div>
       </section>
     </div>
   `;
+}
+
+function safeRenderActivePanel(user) {
+  try {
+    return renderActivePanel(user);
+  } catch (error) {
+    notifyRuntimeError(`Panel render failure: ${state.activeTab}`, error);
+    return `
+      <section class="card">
+        <h3>Feature temporarily unavailable</h3>
+        <p class="muted">
+          This screen hit an unexpected error. Try refreshing data or switching tabs.
+        </p>
+        <div class="button-row">
+          <button class="btn-secondary" data-action="switch-tab" data-tab="dashboard">Go to Dashboard</button>
+          <button class="btn-secondary" data-action="switch-tab" data-tab="notifications">Open Notifications</button>
+        </div>
+      </section>
+    `;
+  }
 }
 
 function renderActivePanel(user) {
@@ -1699,8 +1728,12 @@ function handleSubmit(event) {
 }
 
 function handleClick(event) {
-  const button = event.target.closest("[data-action]");
-  if (!button) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const button = target.closest("[data-action]");
+  if (!(button instanceof HTMLElement)) {
     return;
   }
 
@@ -1790,11 +1823,11 @@ function handleClick(event) {
 
 function handleChange(event) {
   const target = event.target;
-  if (!(target instanceof HTMLElement)) {
+  if (!(target instanceof Element)) {
     return;
   }
   withUiGuard(`Change event: ${target.id || "unknown"}`, () => {
-    if (target.id === "chat-group-select") {
+    if (target.id === "chat-group-select" && target instanceof HTMLSelectElement) {
       state.selectedChatGroupId = target.value;
       render();
     }
@@ -3549,7 +3582,9 @@ function getCurrentUser() {
 }
 
 function getGroupsForUser(userId) {
-  return state.data.groups.filter((group) => group.memberIds.includes(userId));
+  return state.data.groups.filter(
+    (group) => Array.isArray(group.memberIds) && group.memberIds.includes(userId)
+  );
 }
 
 function getCycleContributions(groupId, cycle) {
@@ -3729,20 +3764,29 @@ function upsertKnownDevice(user, deviceId) {
 function applyGroupFilters(groups) {
   const maxContribution = Number(state.groupFilters.maxContribution || 0);
   return groups.filter((group) => {
+    const groupName = String(group?.name || "").toLowerCase();
+    const groupCommunity = String(group?.communityType || "").toLowerCase();
+    const groupLocation = String(group?.location || "").toLowerCase();
+    const groupContribution = Number(group?.contributionAmount || 0);
+    const groupStartTimestamp = Date.parse(String(group?.startDate || ""));
+    const filterStartTimestamp = Date.parse(state.groupFilters.startDate || "");
+
     const nameMatch = state.groupFilters.query
-      ? group.name.toLowerCase().includes(state.groupFilters.query.toLowerCase())
+      ? groupName.includes(state.groupFilters.query.toLowerCase())
       : true;
     const communityMatch = state.groupFilters.community
-      ? group.communityType.toLowerCase().includes(state.groupFilters.community.toLowerCase())
+      ? groupCommunity.includes(state.groupFilters.community.toLowerCase())
       : true;
     const locationMatch = state.groupFilters.location
-      ? group.location.toLowerCase().includes(state.groupFilters.location.toLowerCase())
+      ? groupLocation.includes(state.groupFilters.location.toLowerCase())
       : true;
     const amountMatch = maxContribution
-      ? Number(group.contributionAmount) <= maxContribution
+      ? groupContribution <= maxContribution
       : true;
     const startDateMatch = state.groupFilters.startDate
-      ? new Date(group.startDate) >= new Date(state.groupFilters.startDate)
+      ? !Number.isNaN(groupStartTimestamp) &&
+        !Number.isNaN(filterStartTimestamp) &&
+        groupStartTimestamp >= filterStartTimestamp
       : true;
     return nameMatch && communityMatch && locationMatch && amountMatch && startDateMatch;
   });
@@ -3974,47 +4018,307 @@ function safeStorageRemove(key) {
 }
 
 function ensureDataShape(rawData) {
-  const data = rawData || {};
-  data.users = Array.isArray(data.users) ? data.users : [];
-  data.groups = Array.isArray(data.groups) ? data.groups : [];
-  data.contributions = Array.isArray(data.contributions) ? data.contributions : [];
-  data.payouts = Array.isArray(data.payouts) ? data.payouts : [];
-  data.payoutVotes = Array.isArray(data.payoutVotes) ? data.payoutVotes : [];
-  data.priorityClaims = Array.isArray(data.priorityClaims) ? data.priorityClaims : [];
-  data.chats = Array.isArray(data.chats) ? data.chats : [];
-  data.notifications = Array.isArray(data.notifications) ? data.notifications : [];
-  data.auditLogs = Array.isArray(data.auditLogs) ? data.auditLogs : [];
-  data.disputes = Array.isArray(data.disputes) ? data.disputes : [];
-  data.fraudFlags = Array.isArray(data.fraudFlags) ? data.fraudFlags : [];
-  data.authControls = data.authControls || { loginAttempts: {} };
-  if (!data.authControls.loginAttempts) {
+  const raw = rawData && typeof rawData === "object" ? rawData : {};
+  const data = {
+    users: Array.isArray(raw.users) ? raw.users : [],
+    groups: Array.isArray(raw.groups) ? raw.groups : [],
+    contributions: Array.isArray(raw.contributions) ? raw.contributions : [],
+    payouts: Array.isArray(raw.payouts) ? raw.payouts : [],
+    payoutVotes: Array.isArray(raw.payoutVotes) ? raw.payoutVotes : [],
+    priorityClaims: Array.isArray(raw.priorityClaims) ? raw.priorityClaims : [],
+    chats: Array.isArray(raw.chats) ? raw.chats : [],
+    notifications: Array.isArray(raw.notifications) ? raw.notifications : [],
+    auditLogs: Array.isArray(raw.auditLogs) ? raw.auditLogs : [],
+    disputes: Array.isArray(raw.disputes) ? raw.disputes : [],
+    fraudFlags: Array.isArray(raw.fraudFlags) ? raw.fraudFlags : [],
+    authControls:
+      raw.authControls && typeof raw.authControls === "object"
+        ? raw.authControls
+        : { loginAttempts: {} },
+  };
+
+  if (!data.authControls.loginAttempts || typeof data.authControls.loginAttempts !== "object") {
     data.authControls.loginAttempts = {};
   }
-  data.users.forEach((user) => {
-    user.knownDevices = Array.isArray(user.knownDevices) ? user.knownDevices : [];
-    user.paymentMethods = Array.isArray(user.paymentMethods) ? user.paymentMethods : [];
-    user.metrics = user.metrics || {
-      paidContributions: 0,
-      completedGroups: 0,
-      internalTrustScore: 50,
-    };
-    user.kyc = user.kyc || {
-      status: "unverified",
-      idType: "",
-      idNumberToken: "",
-      dob: "",
-      selfieToken: "",
-      address: "",
-      submittedAt: null,
-    };
-    if (typeof user.mfaEnabled !== "boolean") {
-      user.mfaEnabled = true;
-    }
-    if (typeof user.biometricEnabled !== "boolean") {
-      user.biometricEnabled = false;
-    }
-  });
+
+  data.users = data.users
+    .filter((user) => user && typeof user === "object")
+    .map((user, index) => {
+      const knownDevices = Array.isArray(user.knownDevices)
+        ? user.knownDevices
+            .filter((device) => device && typeof device === "object")
+            .map((device) => ({
+              id: String(device.id || uid("dev")),
+              label: String(device.label || "Trusted device"),
+              lastSeenAt: asIsoTimestamp(device.lastSeenAt),
+            }))
+        : [];
+      const paymentMethods = Array.isArray(user.paymentMethods)
+        ? user.paymentMethods
+            .filter((method) => method && typeof method === "object")
+            .map((method) => ({
+              id: String(method.id || uid("pm")),
+              type: String(method.type || "bank"),
+              label: String(method.label || "Payment method"),
+              last4: String(method.last4 || "0000"),
+              token: String(method.token || tokenize(`method:${method.id || uid("pmseed")}`)),
+              autoDebit: Boolean(method.autoDebit),
+              createdAt: asIsoTimestamp(method.createdAt),
+            }))
+        : [];
+      const metrics = user.metrics && typeof user.metrics === "object" ? user.metrics : {};
+      const kyc = user.kyc && typeof user.kyc === "object" ? user.kyc : {};
+      return {
+        id: String(user.id || `usr_recovered_${index}`),
+        fullName: String(user.fullName || "Unknown User"),
+        email: normalizeEmail(String(user.email || `recovered${index}@susukonnect.app`)),
+        phone: String(user.phone || ""),
+        role: ["member", "leader", "admin"].includes(user.role) ? user.role : "member",
+        salt: String(user.salt || uid("salt")),
+        passwordHash: String(user.passwordHash || hashPassword("Password@2026", String(user.salt || uid("salt")))),
+        acceptedTerms: user.acceptedTerms !== false,
+        verifiedBadge: Boolean(user.verifiedBadge),
+        biometricEnabled: typeof user.biometricEnabled === "boolean" ? user.biometricEnabled : false,
+        mfaEnabled: typeof user.mfaEnabled === "boolean" ? user.mfaEnabled : true,
+        status: user.status === "suspended" ? "suspended" : "active",
+        knownDevices,
+        paymentMethods,
+        kyc: {
+          status: ["verified", "pending", "rejected", "unverified"].includes(kyc.status)
+            ? kyc.status
+            : "unverified",
+          idType: String(kyc.idType || ""),
+          idNumberToken: String(kyc.idNumberToken || ""),
+          dob: String(kyc.dob || ""),
+          selfieToken: String(kyc.selfieToken || ""),
+          address: String(kyc.address || ""),
+          submittedAt: kyc.submittedAt ? asIsoTimestamp(kyc.submittedAt) : null,
+        },
+        metrics: {
+          paidContributions: asFiniteNumber(metrics.paidContributions, 0),
+          completedGroups: asFiniteNumber(metrics.completedGroups, 0),
+          internalTrustScore: asFiniteNumber(metrics.internalTrustScore, 50),
+        },
+        createdAt: asIsoTimestamp(user.createdAt),
+        lastLoginAt: user.lastLoginAt ? asIsoTimestamp(user.lastLoginAt) : null,
+      };
+    });
+
+  data.groups = data.groups
+    .filter((group) => group && typeof group === "object")
+    .map((group, index) => {
+      const leaderId = String(group.leaderId || data.users[0]?.id || "");
+      const memberIds = normalizeStringArray(group.memberIds);
+      if (leaderId && !memberIds.includes(leaderId)) {
+        memberIds.unshift(leaderId);
+      }
+      const joinRequests = normalizeStringArray(group.joinRequests).filter(
+        (userId) => !memberIds.includes(userId)
+      );
+      const payoutOrder = normalizeStringArray(group.payoutOrder).filter((userId) =>
+        memberIds.includes(userId)
+      );
+      memberIds.forEach((userId) => {
+        if (!payoutOrder.includes(userId)) {
+          payoutOrder.push(userId);
+        }
+      });
+      return {
+        id: String(group.id || `grp_recovered_${index}`),
+        inviteCode: String(group.inviteCode || uid("join")),
+        name: String(group.name || `Recovered Group ${index + 1}`),
+        description: String(group.description || ""),
+        communityType: String(group.communityType || ""),
+        location: String(group.location || ""),
+        startDate: asDateInput(group.startDate),
+        contributionAmount: asFiniteNumber(group.contributionAmount, 0),
+        currency: CURRENCIES.includes(group.currency) ? group.currency : "USD",
+        totalMembers: Math.max(2, Math.round(asFiniteNumber(group.totalMembers, memberIds.length || 2))),
+        payoutFrequency: "monthly",
+        payoutOrderLogic: ["fixed", "voting", "priority"].includes(group.payoutOrderLogic)
+          ? group.payoutOrderLogic
+          : "fixed",
+        gracePeriodDays: Math.max(0, Math.round(asFiniteNumber(group.gracePeriodDays, 0))),
+        requiresLeaderApproval: Boolean(group.requiresLeaderApproval),
+        rules: String(group.rules || ""),
+        leaderId,
+        memberIds,
+        joinRequests,
+        payoutOrder,
+        cycle: Math.max(1, Math.round(asFiniteNumber(group.cycle, 1))),
+        status: ["active", "suspended", "completed"].includes(group.status)
+          ? group.status
+          : "active",
+        chatArchived: Boolean(group.chatArchived),
+        createdAt: asIsoTimestamp(group.createdAt),
+        updatedAt: group.updatedAt ? asIsoTimestamp(group.updatedAt) : undefined,
+      };
+    });
+
+  data.contributions = data.contributions
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry, index) => ({
+      id: String(entry.id || `ctr_recovered_${index}`),
+      groupId: String(entry.groupId || ""),
+      cycle: Math.max(1, Math.round(asFiniteNumber(entry.cycle, 1))),
+      userId: String(entry.userId || ""),
+      amount: asFiniteNumber(entry.amount, 0),
+      dueDate: asIsoTimestamp(entry.dueDate),
+      status: ["pending", "late", "paid"].includes(entry.status) ? entry.status : "pending",
+      methodId: String(entry.methodId || ""),
+      methodType: String(entry.methodType || ""),
+      autoDebit: Boolean(entry.autoDebit),
+      paidAt: entry.paidAt ? asIsoTimestamp(entry.paidAt) : null,
+      reminderSentAt: entry.reminderSentAt ? asIsoTimestamp(entry.reminderSentAt) : null,
+      createdAt: asIsoTimestamp(entry.createdAt),
+    }));
+
+  data.payouts = data.payouts
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry, index) => ({
+      id: String(entry.id || `pay_recovered_${index}`),
+      groupId: String(entry.groupId || ""),
+      cycle: Math.max(1, Math.round(asFiniteNumber(entry.cycle, 1))),
+      recipientId: String(entry.recipientId || ""),
+      amount: asFiniteNumber(entry.amount, 0),
+      currency: CURRENCIES.includes(entry.currency) ? entry.currency : "USD",
+      reason: PAYOUT_REASONS.includes(entry.reason) ? entry.reason : "Custom reason",
+      customReason: String(entry.customReason || ""),
+      status: ["requested", "approved", "released", "rejected"].includes(entry.status)
+        ? entry.status
+        : "requested",
+      requestedAt: asIsoTimestamp(entry.requestedAt),
+      leaderApprovedBy: entry.leaderApprovedBy ? String(entry.leaderApprovedBy) : null,
+      adminApprovedBy: entry.adminApprovedBy ? String(entry.adminApprovedBy) : null,
+      recipientMfaConfirmed: Boolean(entry.recipientMfaConfirmed),
+      releasedAt: entry.releasedAt ? asIsoTimestamp(entry.releasedAt) : null,
+      platformFee: asFiniteNumber(entry.platformFee, 0),
+      netAmount: asFiniteNumber(entry.netAmount, 0),
+    }));
+
+  data.payoutVotes = data.payoutVotes
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry, index) => ({
+      id: String(entry.id || `vote_recovered_${index}`),
+      groupId: String(entry.groupId || ""),
+      cycle: Math.max(1, Math.round(asFiniteNumber(entry.cycle, 1))),
+      voterId: String(entry.voterId || ""),
+      candidateId: String(entry.candidateId || ""),
+      note: String(entry.note || ""),
+      createdAt: asIsoTimestamp(entry.createdAt),
+    }));
+
+  data.priorityClaims = data.priorityClaims
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry, index) => ({
+      id: String(entry.id || `claim_recovered_${index}`),
+      groupId: String(entry.groupId || ""),
+      cycle: Math.max(1, Math.round(asFiniteNumber(entry.cycle, 1))),
+      userId: String(entry.userId || ""),
+      reason: PAYOUT_REASONS.includes(entry.reason) ? entry.reason : "Custom reason",
+      customReason: String(entry.customReason || ""),
+      weight: asFiniteNumber(entry.weight, PRIORITY_WEIGHTS["Custom reason"]),
+      createdAt: asIsoTimestamp(entry.createdAt),
+    }));
+
+  data.chats = data.chats
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry, index) => ({
+      id: String(entry.id || `msg_recovered_${index}`),
+      groupId: String(entry.groupId || ""),
+      userId: String(entry.userId || ""),
+      content: String(entry.content || ""),
+      type: entry.type === "announcement" ? "announcement" : "message",
+      pinned: Boolean(entry.pinned),
+      createdAt: asIsoTimestamp(entry.createdAt),
+    }));
+
+  data.notifications = data.notifications
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry, index) => ({
+      id: String(entry.id || `note_recovered_${index}`),
+      userId: String(entry.userId || ""),
+      title: String(entry.title || ""),
+      body: String(entry.body || ""),
+      type: String(entry.type || "general"),
+      dedupeKey: String(entry.dedupeKey || ""),
+      read: Boolean(entry.read),
+      createdAt: asIsoTimestamp(entry.createdAt),
+    }));
+
+  data.auditLogs = data.auditLogs
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry, index) => ({
+      id: String(entry.id || `audit_recovered_${index}`),
+      actorId: String(entry.actorId || "system"),
+      action: String(entry.action || "UNKNOWN"),
+      targetType: String(entry.targetType || "unknown"),
+      targetId: String(entry.targetId || "unknown"),
+      metadata: entry.metadata && typeof entry.metadata === "object" ? entry.metadata : {},
+      timestamp: asIsoTimestamp(entry.timestamp),
+      previousHash: String(entry.previousHash || "GENESIS"),
+      entryHash: String(entry.entryHash || hashValue(`recovered:${index}:${Date.now()}`)),
+    }));
+
+  data.disputes = data.disputes
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry, index) => ({
+      id: String(entry.id || `dispute_recovered_${index}`),
+      groupId: String(entry.groupId || ""),
+      reporterId: String(entry.reporterId || ""),
+      summary: String(entry.summary || ""),
+      status: entry.status === "resolved" ? "resolved" : "open",
+      createdAt: asIsoTimestamp(entry.createdAt),
+      resolvedAt: entry.resolvedAt ? asIsoTimestamp(entry.resolvedAt) : null,
+      resolution: String(entry.resolution || ""),
+    }));
+
+  data.fraudFlags = data.fraudFlags
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry, index) => ({
+      id: String(entry.id || `flag_recovered_${index}`),
+      targetType: ["user", "group", "transaction"].includes(entry.targetType)
+        ? entry.targetType
+        : "transaction",
+      targetId: String(entry.targetId || ""),
+      reason: String(entry.reason || ""),
+      createdBy: String(entry.createdBy || "system"),
+      createdAt: asIsoTimestamp(entry.createdAt),
+    }));
+
+  data.authControls.loginAttempts = data.authControls.loginAttempts || {};
+
   return data;
+}
+
+function normalizeStringArray(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => String(item || "").trim())
+    .filter((item) => item.length > 0);
+}
+
+function asFiniteNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function asIsoTimestamp(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) {
+    return new Date().toISOString();
+  }
+  return date.toISOString();
+}
+
+function asDateInput(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+  return date.toISOString().slice(0, 10);
 }
 
 function createSeedData() {
