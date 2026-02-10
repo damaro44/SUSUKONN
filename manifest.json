@@ -1,0 +1,19 @@
+{
+  "name": "SusuKonnect",
+  "short_name": "SusuKonnect",
+  "description": "Digital rotational savings platform with KYC, transparent ledgers, secure payouts, and community trust workflows.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f2f6fb",
+  "theme_color": "#0c3c64",
+  "icons": [
+    {
+      "src": "assets/susukonnect-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

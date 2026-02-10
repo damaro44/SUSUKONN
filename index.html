@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SusuKonnect | Collective Savings Fintech MVP</title>
+    <meta
+      name="description"
+      content="SusuKonnect digitizes trusted community savings circles with transparent contributions, secure payouts, and compliant fintech controls."
+    />
+    <meta name="theme-color" content="#0c3c64" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="assets/susukonnect-mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="brand-header">
+        <img
+          src="assets/susukonnect-logo.svg"
+          alt="SusuKonnect logo with tagline"
+          class="brand-logo"
+        />
+      </header>
+
+      <main class="app-main" id="app-main">
+        <noscript>
+          <p class="noscript-warning">
+            SusuKonnect requires JavaScript to load secure onboarding and
+            savings workflows.
+          </p>
+        </noscript>
+      </main>
+    </div>
+
+    <div id="mfa-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-panel">
+        <h2>MFA Verification Required</h2>
+        <p id="mfa-purpose"></p>
+        <p class="demo-code" id="mfa-code"></p>
+        <form id="mfa-form">
+          <label for="mfa-input">Enter 6-digit verification code</label>
+          <input id="mfa-input" name="code" minlength="6" maxlength="6" required />
+          <div class="modal-actions">
+            <button type="submit" class="btn-primary">Confirm</button>
+            <button type="button" id="mfa-cancel" class="btn-secondary">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

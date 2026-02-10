@@ -1,8 +1,12 @@
-const CACHE_NAME = 'susukonnect-demo-v1';
+const CACHE_NAME = 'susukonnect-mvp-v2';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json'
+  './',
+  './index.html',
+  './manifest.json',
+  './styles.css',
+  './app.js',
+  './assets/susukonnect-mark.svg',
+  './assets/susukonnect-logo.svg'
 ];
 
 // Install event - cache resources

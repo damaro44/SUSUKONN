@@ -1,0 +1,19 @@
+<svg width="1200" height="350" viewBox="0 0 1200 350" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="350" fill="white" />
+  <g transform="translate(30,20)">
+    <rect x="0" y="0" width="300" height="300" rx="46" fill="#0C3C64" />
+    <rect x="8" y="8" width="284" height="284" rx="38" stroke="#083050" stroke-width="10" />
+    <path d="M46 55H102L130 83V132L102 160H46" stroke="#E7BE63" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M254 55H198L170 83V217L198 245H254" stroke="#E7BE63" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="40" cy="55" r="11" fill="#0C3C64" stroke="#E7BE63" stroke-width="7" />
+    <circle cx="260" cy="55" r="11" fill="#0C3C64" stroke="#E7BE63" stroke-width="7" />
+    <circle cx="40" cy="245" r="11" fill="#0C3C64" stroke="#E7BE63" stroke-width="7" />
+    <circle cx="260" cy="245" r="11" fill="#0C3C64" stroke="#E7BE63" stroke-width="7" />
+    <path d="M83 154C97.7628 165.945 116.58 173 137 173C154.289 173 170.431 167.949 183.994 159.247" stroke="#E7BE63" stroke-width="8" stroke-linecap="round" />
+    <path d="M120.942 75.1114C111.298 71.7938 100.948 70.1113 90.1429 70.1113C71.4585 70.1113 54.1255 74.8352 39.0085 83.1222L46.7348 101.709C58.2239 95.6544 73.1658 91.8733 89.1429 91.8733C96.8615 91.8733 104.125 92.8106 110.916 94.5928L120.942 75.1114Z" fill="white" />
+    <path d="M42.6254 131.696C48.2477 112.225 66.3628 99.1113 88.1429 99.1113C114.65 99.1113 136.143 119.983 136.143 145.736C136.143 171.489 114.65 192.361 88.1429 192.361C67.9052 192.361 50.6778 180.188 44.3538 162.893L25.0861 169.589C34.3404 195.426 58.8771 213.111 88.1429 213.111C125.939 213.111 157.143 183.385 157.143 145.736C157.143 108.087 125.939 78.3613 88.1429 78.3613C58.0234 78.3613 31.9598 97.2549 23.0022 124.861L42.6254 131.696Z" fill="white" />
+    <path d="M171 70H197V124L248 70H281L225 131L286 230H251L212 169L197 183V230H171V70Z" fill="white" />
+  </g>
+  <text x="360" y="190" fill="#0C4A76" font-size="108" font-family="Inter, Segoe UI, Arial, sans-serif" font-weight="700">SusuKonnect</text>
+  <text x="365" y="260" fill="#263645" font-size="56" font-family="Inter, Segoe UI, Arial, sans-serif" font-weight="500">Saving Together, Growing Together</text>
+</svg>
