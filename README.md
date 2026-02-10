@@ -4,7 +4,7 @@ SusuKonnect now includes a split production-oriented architecture while preservi
 
 - **React Native frontend** (`apps/mobile`)
 - **Node backend implementation** (`services/api-node`)
-- **Laravel-compatible backend scaffold** (`services/api-laravel`)
+- **Laravel parity backend implementation** (`services/api-laravel`)
 - **Shared domain contracts/types** (`packages/shared`)
 - **OpenAPI contract** (`docs/openapi/susukonnect-v1.yaml`)
 
@@ -21,7 +21,7 @@ apps/
   mobile/                # Expo React Native client
 services/
   api-node/              # Primary backend implementation (TypeScript/Express)
-  api-laravel/           # Laravel route/controller scaffold (contract aligned)
+  api-laravel/           # Laravel parity controllers/services/policies/tests
 packages/
   shared/                # Shared types/constants/domain models
 docs/

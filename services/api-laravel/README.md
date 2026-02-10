@@ -1,6 +1,6 @@
-# SusuKonnect Laravel Backend Scaffold
+# SusuKonnect Laravel Backend (Parity Implementation)
 
-This directory provides a Laravel-aligned implementation path with the same API contract used by:
+This directory now contains a full Laravel-oriented parity implementation path with the same API contract used by:
 
 - `services/api-node` (primary implementation)
 - `apps/mobile` (React Native client)
@@ -9,29 +9,55 @@ This directory provides a Laravel-aligned implementation path with the same API 
 
 - Keep Node and Laravel backends contract-compatible.
 - Enable migration or dual-team development without breaking mobile flows.
-- Mirror MVP behavior semantics: auth, KYC, groups, contributions, payouts, chat, notifications, admin compliance.
+- Mirror MVP behavior semantics from the Node backend:
+  - auth + MFA
+  - KYC lifecycle
+  - groups + joins + approvals
+  - contributions + payout orchestration
+  - chat + notifications + calendar
+  - admin compliance + audit/export
 
 ## API Contract Source of Truth
 
 - `docs/openapi/susukonnect-v1.yaml`
 
-## Expected Laravel Structure
+## Implemented Structure
 
-- `routes/api.php` - endpoint map and middleware wiring
-- `app/Http/Controllers/*` - thin controllers
-- `app/Services/Domain/*` - business logic parity with Node engine
-- `app/Services/Providers/*` - Stripe/PayPal/KYC integrations
-- `app/Policies/*` - RBAC authorization policies
+- `routes/api.php` - endpoint map compatible with Node contract
+- `app/Http/Controllers/*` - concrete controller logic using domain engine
+- `app/Services/Domain/DomainEngineService.php` - full parity business engine
+- `app/Services/Domain/DomainStateRepository.php` - in-memory state persistence
+- `app/Services/Domain/SeedStateFactory.php` - deterministic seed data
+- `app/Services/Providers/*` - Stripe/PayPal/KYC provider adapters
+- `app/Policies/*` - RBAC policies
+- `app/Providers/*` - service bindings and auth gates
+- `tests/Feature` and `tests/Unit` - parity tests
 
-## Suggested packages
+## Composer Packages
 
-- `laravel/sanctum` for token auth
-- `stripe/stripe-php` for Stripe payments + Stripe Identity
-- PayPal REST integration via Guzzle + OAuth token service
+- `laravel/framework`
+- `stripe/stripe-php`
+- `phpunit/phpunit`
 
-## Next steps
+## Run (inside a PHP/Laravel environment)
 
-1. Create Laravel project in this folder (or link existing repo).
-2. Copy endpoint map from `routes/api.php`.
-3. Implement domain services mirroring Node behavior rules exactly.
-4. Reuse OpenAPI contract for request/response validation tests.
+1. Install dependencies:
+
+```bash
+composer install
+```
+
+2. Run tests:
+
+```bash
+vendor/bin/phpunit --configuration phpunit.xml
+```
+
+3. Wire providers in Laravel app bootstrap if needed:
+   - `App\Providers\DomainServiceProvider`
+   - `App\Providers\AuthServiceProvider`
+
+## Notes
+
+- This implementation intentionally keeps state in-memory for parity prototyping.
+- For production, replace `DomainStateRepository` with database-backed repositories (Eloquent + migrations) while preserving service-level rules.
