@@ -126,7 +126,7 @@ v1Router.post("/groups", requireAuth, (request, response) => {
 });
 
 v1Router.post("/groups/:groupId/join", requireAuth, (request, response) => {
-  const data = engine.joinGroup(request.authUser!.id, request.params.groupId);
+  const data = engine.joinGroup(request.authUser!.id, pathParam(request.params.groupId));
   response.json({ data });
 });
 
@@ -134,21 +134,25 @@ v1Router.post("/groups/:groupId/join-requests/:userId/decision", requireAuth, (r
   const payload = z.object({ decision: z.enum(["approve", "reject"]) }).parse(request.body);
   const data = engine.reviewJoinRequest(
     request.authUser!.id,
-    request.params.groupId,
-    request.params.userId,
+    pathParam(request.params.groupId),
+    pathParam(request.params.userId),
     payload.decision
   );
   response.json({ data });
 });
 
 v1Router.post("/groups/:groupId/remind", requireAuth, (request, response) => {
-  const data = engine.sendGroupReminders(request.authUser!.id, request.params.groupId);
+  const data = engine.sendGroupReminders(request.authUser!.id, pathParam(request.params.groupId));
   response.json({ data });
 });
 
 v1Router.patch("/groups/:groupId/status", requireAuth, requireRole(["admin"]), (request, response) => {
   const payload = z.object({ status: z.enum(["active", "suspended"]) }).parse(request.body);
-  const data = engine.updateGroupStatus(request.authUser!.id, request.params.groupId, payload.status);
+  const data = engine.updateGroupStatus(
+    request.authUser!.id,
+    pathParam(request.params.groupId),
+    payload.status
+  );
   response.json({ data });
 });
 
@@ -166,7 +170,11 @@ v1Router.post("/contributions/:contributionId/pay", requireAuth, async (request,
       mfaCode: z.string().length(6).optional(),
     })
     .parse(request.body);
-  const result = await engine.payContribution(request.authUser!.id, request.params.contributionId, payload);
+  const result = await engine.payContribution(
+    request.authUser!.id,
+    pathParam(request.params.contributionId),
+    payload
+  );
   if (result.mfaRequired) {
     response.status(428).json({
       error: {
@@ -194,7 +202,7 @@ v1Router.post("/groups/:groupId/payouts/request", requireAuth, (request, respons
     .parse(request.body);
   const data = engine.requestPayout(
     request.authUser!.id,
-    request.params.groupId,
+    pathParam(request.params.groupId),
     payload.reason,
     payload.customReason
   );
@@ -208,7 +216,12 @@ v1Router.post("/groups/:groupId/votes", requireAuth, (request, response) => {
       note: z.string().optional(),
     })
     .parse(request.body);
-  engine.submitVote(request.authUser!.id, request.params.groupId, payload.candidateId, payload.note);
+  engine.submitVote(
+    request.authUser!.id,
+    pathParam(request.params.groupId),
+    payload.candidateId,
+    payload.note
+  );
   response.status(201).json({ data: { ok: true } });
 });
 
@@ -219,7 +232,12 @@ v1Router.post("/groups/:groupId/priority-claims", requireAuth, (request, respons
       customReason: z.string().optional(),
     })
     .parse(request.body);
-  engine.submitPriorityClaim(request.authUser!.id, request.params.groupId, payload.reason, payload.customReason);
+  engine.submitPriorityClaim(
+    request.authUser!.id,
+    pathParam(request.params.groupId),
+    payload.reason,
+    payload.customReason
+  );
   response.status(201).json({ data: { ok: true } });
 });
 
@@ -230,7 +248,7 @@ v1Router.post("/payouts/:payoutId/approve", requireAuth, (request, response) => 
       mfaCode: z.string().length(6).optional(),
     })
     .parse(request.body);
-  const result = engine.approvePayout(request.authUser!.id, request.params.payoutId, payload);
+  const result = engine.approvePayout(request.authUser!.id, pathParam(request.params.payoutId), payload);
   if (result.mfaRequired) {
     response.status(428).json({
       error: { code: "MFA_REQUIRED", message: "MFA verification is required." },
@@ -248,7 +266,11 @@ v1Router.post("/payouts/:payoutId/confirm-recipient", requireAuth, (request, res
       mfaCode: z.string().length(6).optional(),
     })
     .parse(request.body);
-  const result = engine.confirmPayoutRecipient(request.authUser!.id, request.params.payoutId, payload);
+  const result = engine.confirmPayoutRecipient(
+    request.authUser!.id,
+    pathParam(request.params.payoutId),
+    payload
+  );
   if (result.mfaRequired) {
     response.status(428).json({
       error: { code: "MFA_REQUIRED", message: "MFA verification is required." },
@@ -266,7 +288,11 @@ v1Router.post("/payouts/:payoutId/release", requireAuth, async (request, respons
       mfaCode: z.string().length(6).optional(),
     })
     .parse(request.body);
-  const result = await engine.releasePayout(request.authUser!.id, request.params.payoutId, payload);
+  const result = await engine.releasePayout(
+    request.authUser!.id,
+    pathParam(request.params.payoutId),
+    payload
+  );
   if (result.mfaRequired) {
     response.status(428).json({
       error: { code: "MFA_REQUIRED", message: "MFA verification is required." },
@@ -278,7 +304,7 @@ v1Router.post("/payouts/:payoutId/release", requireAuth, async (request, respons
 });
 
 v1Router.get("/groups/:groupId/chat", requireAuth, (request, response) => {
-  const data = engine.listChat(request.authUser!.id, request.params.groupId);
+  const data = engine.listChat(request.authUser!.id, pathParam(request.params.groupId));
   response.json({ data });
 });
 
@@ -290,12 +316,12 @@ v1Router.post("/groups/:groupId/chat", requireAuth, (request, response) => {
       pin: z.boolean().optional(),
     })
     .parse(request.body);
-  const data = engine.sendChat(request.authUser!.id, request.params.groupId, payload);
+  const data = engine.sendChat(request.authUser!.id, pathParam(request.params.groupId), payload);
   response.status(201).json({ data });
 });
 
 v1Router.post("/chat/:messageId/pin", requireAuth, (request, response) => {
-  const data = engine.togglePin(request.authUser!.id, request.params.messageId);
+  const data = engine.togglePin(request.authUser!.id, pathParam(request.params.messageId));
   response.json({ data });
 });
 
@@ -310,7 +336,7 @@ v1Router.get("/notifications", requireAuth, (request, response) => {
 });
 
 v1Router.post("/notifications/:notificationId/read", requireAuth, (request, response) => {
-  engine.markNotificationRead(request.authUser!.id, request.params.notificationId);
+  engine.markNotificationRead(request.authUser!.id, pathParam(request.params.notificationId));
   response.status(204).send();
 });
 
@@ -409,7 +435,7 @@ v1Router.delete("/me/payment-methods/:methodId", requireAuth, (request, response
     .parse(request.body ?? {});
   const result = engine.removePaymentMethod(
     request.authUser!.id,
-    request.params.methodId,
+    pathParam(request.params.methodId),
     payload.mfaChallengeId,
     payload.mfaCode
   );
@@ -424,7 +450,7 @@ v1Router.delete("/me/payment-methods/:methodId", requireAuth, (request, response
 });
 
 v1Router.delete("/me/devices/:deviceId", requireAuth, (request, response) => {
-  engine.removeDevice(request.authUser!.id, request.params.deviceId);
+  engine.removeDevice(request.authUser!.id, pathParam(request.params.deviceId));
   response.status(204).send();
 });
 
@@ -446,7 +472,7 @@ v1Router.get("/admin/overview", requireAuth, requireRole(["admin"]), (request, r
 
 v1Router.post("/admin/kyc/:userId/review", requireAuth, requireRole(["admin"]), (request, response) => {
   const payload = z.object({ status: z.enum(["verified", "rejected"]) }).parse(request.body);
-  const data = engine.reviewKyc(request.authUser!.id, request.params.userId, payload.status);
+  const data = engine.reviewKyc(request.authUser!.id, pathParam(request.params.userId), payload.status);
   response.json({ data });
 });
 
@@ -463,7 +489,7 @@ v1Router.post("/admin/fraud-flags", requireAuth, requireRole(["admin"]), (reques
 });
 
 v1Router.post("/admin/disputes/:disputeId/resolve", requireAuth, requireRole(["admin", "leader"]), (request, response) => {
-  const data = engine.resolveDispute(request.authUser!.id, request.params.disputeId);
+  const data = engine.resolveDispute(request.authUser!.id, pathParam(request.params.disputeId));
   response.json({ data });
 });
 
@@ -490,4 +516,8 @@ v1Router.get("/admin/audit", requireAuth, requireRole(["admin"]), (request, resp
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function pathParam(value: string | string[]): string {
+  return Array.isArray(value) ? value[0] : value;
 }

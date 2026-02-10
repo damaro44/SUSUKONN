@@ -5,6 +5,9 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@susukonnect/shared": [
+        "../../packages/shared/src/index.ts"
+      ],
       "@/*": [
         "src/*"
       ]

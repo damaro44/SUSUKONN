@@ -12,7 +12,7 @@ const envSchema = z.object({
   MFA_TTL_MINUTES: z.coerce.number().default(10),
   EXPOSE_MFA_CODES: z
     .string()
-    .optional()
+    .default("true")
     .transform((value) => value === "true"),
   PAYMENTS_LIVE_MODE: z
     .string()

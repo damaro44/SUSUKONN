@@ -5,11 +5,15 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
+    "predev": "npm --prefix ../../packages/shared run build",
     "dev": "tsx watch src/server.ts",
+    "prebuild": "npm --prefix ../../packages/shared run build",
     "build": "tsc -p tsconfig.json",
+    "prestart": "npm --prefix ../../packages/shared run build",
     "start": "node dist/server.js",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm --prefix ../../packages/shared run build",
     "test": "vitest run"
   },
   "dependencies": {

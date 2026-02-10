@@ -790,7 +790,9 @@ export class DomainEngine {
       groupId,
       userId,
       content: input.content.trim(),
-      type: canModerate && input.announcement ? "announcement" : "message",
+      type: (canModerate && input.announcement ? "announcement" : "message") as
+        | "announcement"
+        | "message",
       pinned: canModerate && Boolean(input.pin),
       createdAt: nowIso(),
     };
@@ -942,7 +944,10 @@ export class DomainEngine {
     const user = this.requireUser(userId);
     user.mfaEnabled = Boolean(input.mfaEnabled);
     user.biometricEnabled = Boolean(input.biometricEnabled);
-    this.logAudit(userId, "UPDATE_SECURITY_SETTINGS", "user", userId, input);
+    this.logAudit(userId, "UPDATE_SECURITY_SETTINGS", "user", userId, {
+      mfaEnabled: input.mfaEnabled,
+      biometricEnabled: input.biometricEnabled,
+    });
     return { mfaRequired: false, user: this.publicUser(userId) };
   }
 

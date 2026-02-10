@@ -4,11 +4,15 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": "../..",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@susukonnect/shared": ["../../packages/shared/src/index.ts"]
+    }
   },
   "include": ["src", "tests"]
 }
