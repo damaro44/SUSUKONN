@@ -1,0 +1,161 @@
+openapi: 3.1.0
+info:
+  title: SusuKonnect API
+  version: 1.0.0
+  description: |
+    Contract-aligned API for SusuKonnect production architecture.
+    Primary implementation: Node (services/api-node)
+    Alternate implementation: Laravel scaffold (services/api-laravel)
+servers:
+  - url: http://localhost:4000/v1
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+  /auth/register:
+    post:
+      summary: Register account
+      responses:
+        "201":
+          description: Created
+  /auth/login:
+    post:
+      summary: Login (may return MFA_REQUIRED)
+      responses:
+        "200":
+          description: Authenticated
+        "428":
+          description: MFA required
+  /auth/mfa/verify:
+    post:
+      summary: Complete login MFA
+      responses:
+        "200":
+          description: Authenticated
+  /dashboard:
+    get:
+      security:
+        - bearerAuth: []
+      summary: Dashboard summary
+      responses:
+        "200":
+          description: Dashboard payload
+  /groups:
+    get:
+      security:
+        - bearerAuth: []
+      summary: List groups
+      responses:
+        "200":
+          description: Group list
+    post:
+      security:
+        - bearerAuth: []
+      summary: Create group
+      responses:
+        "201":
+          description: Group created
+  /contributions:
+    get:
+      security:
+        - bearerAuth: []
+      summary: List user contributions
+      responses:
+        "200":
+          description: Contribution list
+  /contributions/{contributionId}/pay:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Pay contribution (MFA protected)
+      parameters:
+        - in: path
+          name: contributionId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Contribution paid
+        "428":
+          description: MFA required
+  /groups/{groupId}/payouts/request:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Request payout for current cycle
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Payout requested
+  /payouts/{payoutId}/approve:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Approve payout (leader/admin + MFA)
+      parameters:
+        - in: path
+          name: payoutId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payout approval updated
+        "428":
+          description: MFA required
+  /payouts/{payoutId}/release:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Release payout (MFA protected)
+      parameters:
+        - in: path
+          name: payoutId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payout released
+        "428":
+          description: MFA required
+  /me/kyc:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Submit KYC package
+      responses:
+        "201":
+          description: KYC submitted
+  /me/payment-methods:
+    post:
+      security:
+        - bearerAuth: []
+      summary: Add tokenized payment method (MFA protected)
+      responses:
+        "201":
+          description: Payment method added
+        "428":
+          description: MFA required
+  /admin/overview:
+    get:
+      security:
+        - bearerAuth: []
+      summary: Admin compliance overview
+      responses:
+        "200":
+          description: Admin payload
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

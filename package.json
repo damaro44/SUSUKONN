@@ -1,0 +1,21 @@
+{
+  "name": "susukonnect-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @susukonnect/shared && npm run build --workspace @susukonnect/api-node && npm run build --workspace @susukonnect/mobile",
+    "dev:api": "npm run dev --workspace @susukonnect/api-node",
+    "dev:mobile": "npm run start --workspace @susukonnect/mobile",
+    "lint": "npm run lint --workspace @susukonnect/shared && npm run lint --workspace @susukonnect/api-node && npm run lint --workspace @susukonnect/mobile",
+    "test": "npm run test --workspace @susukonnect/api-node",
+    "typecheck": "npm run typecheck --workspace @susukonnect/shared && npm run typecheck --workspace @susukonnect/api-node && npm run typecheck --workspace @susukonnect/mobile"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

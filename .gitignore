@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.expo/
+.expo-shared/
+coverage/
+.DS_Store
+.env
+.env.local
+.env.*.local
+*.log
+yarn.lock
+pnpm-lock.yaml
+!.github/

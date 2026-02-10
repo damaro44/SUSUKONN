@@ -1,118 +1,84 @@
-# SusuKonnect MVP App Foundation
+# SusuKonnect Production Architecture (Next Pass)
 
-SusuKonnect is a fintech MVP that digitizes traditional rotating savings circles (SuSu, Esusu, Sou-Sou, ROSCA) with secure workflows, transparent records, and compliance controls.
+SusuKonnect now includes a split production-oriented architecture while preserving the same MVP behavior from the first pass:
 
-This implementation is a complete static web app foundation (PWA style) that covers the requested scope of work modules and business-plan context.
+- **React Native frontend** (`apps/mobile`)
+- **Node backend implementation** (`services/api-node`)
+- **Laravel-compatible backend scaffold** (`services/api-laravel`)
+- **Shared domain contracts/types** (`packages/shared`)
+- **OpenAPI contract** (`docs/openapi/susukonnect-v1.yaml`)
 
-## Included MVP Modules
+The original static MVP UI remains in the repo root as a legacy reference:
 
-### 1) User onboarding and verification
-- Email + phone + password registration
-- Terms and Savings Agreement acceptance required
-- Role-aware onboarding (member / leader / admin)
-- KYC submission (ID type, tokenized ID number, DOB, selfie token, address)
-- Admin KYC review and approval/rejection
-- Verified badge handling
+- `index.html`
+- `styles.css`
+- `app.js`
 
-### 2) Authentication and security controls
-- Role-based access control (RBAC)
-- Device fingerprinting and trusted devices
-- MFA modal flow for:
-  - New device login
-  - Contribution payments
-  - Payout approvals
-  - Payout release
-  - Payment method changes
-- Biometric login simulation for trusted devices
-- Session timeout enforcement
-- Brute-force login lockout
+## Monorepo Layout
 
-### 3) Savings group lifecycle
-- Group creation with:
-  - Name, description, location, community tag
-  - Monthly contribution amount
-  - Currency
-  - Member cap
-  - Grace period days
-  - Rules
-  - Join approval requirement toggle
-- Group search/filter:
-  - Name
-  - Community
-  - Location
-  - Contribution amount
-  - Start date
-- Invite link generation/copy
-- Join request and leader/admin review
-- Group suspension/reactivation by admin
+```text
+apps/
+  mobile/                # Expo React Native client
+services/
+  api-node/              # Primary backend implementation (TypeScript/Express)
+  api-laravel/           # Laravel route/controller scaffold (contract aligned)
+packages/
+  shared/                # Shared types/constants/domain models
+docs/
+  openapi/               # API contract
+```
 
-### 4) Contribution engine
-- Per-cycle contribution records
-- Manual payment with tokenized methods
-- Auto-debit preference
-- Grace period handling
-- Late-status escalation
-- Leader reminder actions
-- Smart auto reminders
-- Transparent member payment table
+## Implemented Production-Path Capabilities
 
-### 5) Payout workflow
-- Payout reasons (all requested values + custom reason)
-- Payout order logic:
-  - Fixed rotation
-  - Voting-based
-  - Priority-based (reason scoring)
-- Payout request gate:
-  - All contributions must be paid
-  - KYC verified recipient
-- Approval model:
-  - Leader approval (if required)
-  - Admin approval for high-value payouts
-- Recipient MFA confirmation
-- Final release action with MFA
-- Platform fee (1.5%) and net payout calculation
-- Automatic next-cycle progression
-- Group completion milestone and chat archive
+### Shared business behavior (preserved MVP logic)
+- User onboarding, auth, RBAC, MFA, biometric flow
+- KYC lifecycle and admin review
+- Group creation/joining/approvals
+- Contributions with grace/late/reminder logic
+- Payout orchestration:
+  - fixed rotation
+  - voting-based
+  - priority-based claims
+- Chat, notifications, calendar events
+- Admin compliance:
+  - KYC queue
+  - fraud flags
+  - disputes
+  - group suspension/reactivation
+  - export + audit chain
 
-### 6) In-app communication
-- Group-specific chat
-- Leader/admin announcement mode
-- Message pin/unpin moderation
-- Auto-archive for completed groups
+### Real provider adapter support (Node backend)
+- **Stripe**:
+  - contribution charging
+  - payout transfer path (connected-account capable)
+  - Stripe Identity KYC session support
+- **PayPal**:
+  - OAuth token flow
+  - order create/capture
+  - payouts API flow
 
-### 7) Calendar and notifications
-- Due dates
-- Grace deadlines
-- Payout checkpoints
-- Milestones
-- Notification center with mark read / mark all read
+Provider behavior is env-driven with simulation fallback for local development.
 
-### 8) Admin + compliance dashboard
-- Pending KYC queue
-- Transaction monitoring summary
-- Fraud flag creation
-- Dispute filing and resolution
-- Group controls
-- Immutable audit log table (hash chain)
-- Report export:
-  - JSON
-  - CSV
-  - Audit-chain JSON
+## Quick Start
 
-## Branding
+### 1) Install workspace dependencies
 
-- `assets/susukonnect-mark.svg` (app icon mark)
-- `assets/susukonnect-logo.svg` (header logo with tagline)
-- Colors and typography styled to match the provided SusuKonnect branding direction.
+```bash
+npm install
+```
 
-## File Structure
+### 2) Start Node backend
 
-- `index.html` - App shell and MFA modal
-- `styles.css` - UI system and responsive layout
-- `app.js` - Full application logic and data model
-- `manifest.json` - PWA manifest
-- `service-worker.js` - Offline cache behavior
-- `assets/` - SusuKonnect logo assets
+```bash
+cp services/api-node/.env.example services/api-node/.env
+npm run dev:api
+```
+
+### 3) Start React Native app (Expo)
+
+```bash
+EXPO_PUBLIC_API_BASE_URL=http://localhost:4000/v1 npm run dev:mobile
+```
 
 ## Demo Credentials
 
@@ -120,21 +86,23 @@ This implementation is a complete static web app foundation (PWA style) that cov
 - Leader: `leader@susukonnect.app` / `Leader@2026`
 - Member: `member@susukonnect.app` / `Member@2026`
 
-## Local Run
+## Environment Highlights (Node)
 
-Open `index.html` in a browser, or serve statically:
+See: `services/api-node/.env.example`
 
-```bash
-python3 -m http.server 8080
-```
+Important toggles:
 
-Then visit: `http://localhost:8080`
+- `PAYMENTS_LIVE_MODE=true|false`
+- `KYC_LIVE_MODE=true|false`
+- `EXPOSE_MFA_CODES=true|false`
+- `STRIPE_SECRET_KEY=...`
+- `PAYPAL_CLIENT_ID=...`
+- `PAYPAL_CLIENT_SECRET=...`
 
-## Notes
+## Contract Parity
 
-- This MVP foundation focuses on end-to-end product flow and controls.
-- Real production deployment should replace simulated flows with:
-  - Real KYC provider APIs
-  - Real payment processor APIs
-  - Real MFA channels (SMS/authenticator)
-  - Server-side encryption, storage, and compliance infrastructure
+Use the API contract in `docs/openapi/susukonnect-v1.yaml` as the source of truth for:
+
+- Node route implementation
+- Laravel route/controller implementation
+- Mobile client integration
