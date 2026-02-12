@@ -3470,8 +3470,10 @@ function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
     return;
   }
+  // Query-string registration busts stale SW script caching after hotfixes.
+  const swUrl = "./service-worker.js?v=20260210-4";
   navigator.serviceWorker
-    .register("./service-worker.js")
+    .register(swUrl)
     .catch(() => {
       showToast("Service worker registration skipped.", "warning");
     });

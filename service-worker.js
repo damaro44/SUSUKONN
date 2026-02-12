@@ -1,5 +1,5 @@
-const CACHE_NAME = 'susukonnect-mvp-v2';
-const urlsToCache = [
+const CACHE_NAME = 'susukonnect-mvp-v3';
+const CORE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
@@ -15,7 +15,7 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('Service Worker: Cache opened');
-        return cache.addAll(urlsToCache);
+        return cache.addAll(CORE_ASSETS);
       })
       .catch(err => {
         console.log('Service Worker: Cache failed', err);
@@ -41,41 +41,67 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+function isCoreRequest(request) {
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) {
+    return false;
+  }
+  const path = url.pathname;
+  return (
+    path.endsWith('/') ||
+    path.endsWith('/index.html') ||
+    path.endsWith('/app.js') ||
+    path.endsWith('/styles.css') ||
+    path.endsWith('/manifest.json')
+  );
+}
+
+// Fetch event - network-first for app shell assets, cache-first for others
 self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
+  const useNetworkFirst = isCoreRequest(event.request);
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Return cached version if available
-        if (response) {
-          return response;
-        }
-        
-        // Otherwise fetch from network
-        return fetch(event.request)
+    (useNetworkFirst
+      ? fetch(event.request)
           .then(response => {
-            // Don't cache non-successful responses
             if (!response || response.status !== 200 || response.type === 'error') {
-              return response;
+              return caches.match(event.request).then(cached => cached || response);
             }
-            
-            // Clone the response
             const responseToCache = response.clone();
-            
-            // Cache the successful response
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
-              });
-            
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(event.request, responseToCache);
+            });
             return response;
           })
-          .catch(() => {
-            // If offline and not in cache, return offline page or cached version
-            return caches.match(event.request)
-              .then(response => response || new Response('Offline - Demo still works locally!'));
-          });
-      })
+          .catch(() =>
+            caches.match(event.request).then(
+              cached => cached || new Response('Offline - SusuKonnect cannot reach network right now.')
+            )
+          )
+      : caches.match(event.request).then(cached => {
+          if (cached) {
+            return cached;
+          }
+          return fetch(event.request)
+            .then(response => {
+              if (!response || response.status !== 200 || response.type === 'error') {
+                return response;
+              }
+              const responseToCache = response.clone();
+              caches.open(CACHE_NAME).then(cache => {
+                cache.put(event.request, responseToCache);
+              });
+              return response;
+            })
+            .catch(() =>
+              caches.match(event.request).then(
+                fallback => fallback || new Response('Offline - SusuKonnect cannot reach network right now.')
+              )
+            );
+        }))
   );
 });
 
