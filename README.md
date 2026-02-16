@@ -1,5 +1,18 @@
 # SusuKonnect Production Architecture (Next Pass)
 
+## Project Overview
+
+SuSu Konnect digitizes traditional community-based savings practices (SuSu, Tanda, Chit Fund, Partner, Sou-Sou, ROSCA) widely used across African, Latino, Asian and Caribbean communities.
+
+The platform's goal is to:
+
+- Preserve trust-based group savings
+- Add transparency, automation, and security
+- Eliminate confusion, fraud, and informal disputes
+- Enable safe, verifiable monthly contributions and payouts
+
+Because the app handles real money and collective trust, security, transparency, and accountability are core - not optional.
+
 SusuKonnect now includes a split production-oriented architecture while preserving the same MVP behavior from the first pass:
 
 - **React Native frontend** (`apps/mobile`)

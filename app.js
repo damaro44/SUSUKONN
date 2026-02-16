@@ -162,10 +162,21 @@ function render() {
 function renderAuth() {
   return `
     <section class="card">
-      <h2>Collective savings, modernized for trust and security</h2>
+      <h2>Project Overview</h2>
       <p class="muted">
-        SusuKonnect delivers a complete fintech MVP for traditional rotating savings circles:
-        onboarding + KYC, verified groups, contributions, payouts, chat, reminders, and admin compliance.
+        SuSu Konnect digitizes traditional community-based savings practices (SuSu, Tanda, Chit Fund,
+        Partner, Sou-Sou, ROSCA) widely used across African, Latino, Asian and Caribbean communities.
+      </p>
+      <p class="muted"><strong>The platform's goal is to:</strong></p>
+      <ul class="list-compact">
+        <li>Preserve trust-based group savings</li>
+        <li>Add transparency, automation, and security</li>
+        <li>Eliminate confusion, fraud, and informal disputes</li>
+        <li>Enable safe, verifiable monthly contributions and payouts</li>
+      </ul>
+      <p class="muted">
+        Because the app handles real money and collective trust, security, transparency, and
+        accountability are core - not optional.
       </p>
       <div class="auth-grid">
         <article class="card">
