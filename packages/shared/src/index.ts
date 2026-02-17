@@ -155,6 +155,10 @@ export interface Payout {
   customReason?: string;
   status: PayoutStatus;
   requestedAt: string;
+  reasonReviewStatus?: "pending" | "approved" | "rejected";
+  reasonReviewedBy?: string;
+  reasonReviewedAt?: string;
+  reasonReviewNote?: string;
   leaderApprovedBy?: string;
   adminApprovedBy?: string;
   recipientMfaConfirmed: boolean;
@@ -201,6 +205,10 @@ export interface FraudFlag {
   targetType: "user" | "group" | "transaction";
   targetId: string;
   reason: string;
+  status?: "open" | "resolved";
+  resolvedBy?: string;
+  resolvedAt?: string;
+  resolution?: string;
   createdBy: string;
   createdAt: string;
 }

@@ -73,6 +73,47 @@ final class GroupController extends ApiController
         });
     }
 
+    public function updateConfig(Request $request, string $groupId): JsonResponse
+    {
+        return $this->execute(function () use ($request, $groupId): array {
+            $auth = $this->authContext($request);
+            $input = array_filter([
+                'contributionAmount' => $request->input('contributionAmount'),
+                'gracePeriodDays' => $request->input('gracePeriodDays'),
+                'rules' => $request->input('rules'),
+                'requiresLeaderApproval' => $request->input('requiresLeaderApproval'),
+                'payoutOrderLogic' => $request->input('payoutOrderLogic'),
+                'totalMembers' => $request->input('totalMembers'),
+            ], static fn ($value): bool => $value !== null);
+            return $this->engine->updateGroupConfig((string) $auth['user']['id'], $groupId, $input);
+        });
+    }
+
+    public function updatePayoutOrder(Request $request, string $groupId): JsonResponse
+    {
+        return $this->execute(function () use ($request, $groupId): array {
+            $auth = $this->authContext($request);
+            $payoutOrder = $request->input('payoutOrder', []);
+            return $this->engine->updatePayoutOrder(
+                (string) $auth['user']['id'],
+                $groupId,
+                is_array($payoutOrder) ? array_map(static fn ($item): string => (string) $item, $payoutOrder) : []
+            );
+        });
+    }
+
+    public function moderateChat(Request $request, string $groupId): JsonResponse
+    {
+        return $this->execute(function () use ($request, $groupId): array {
+            $auth = $this->authContext($request);
+            return $this->engine->moderateGroupChat(
+                (string) $auth['user']['id'],
+                $groupId,
+                (bool) $request->input('chatArchived', false)
+            );
+        });
+    }
+
     public function updateStatus(Request $request, string $groupId): JsonResponse
     {
         return $this->execute(function () use ($request, $groupId): array {

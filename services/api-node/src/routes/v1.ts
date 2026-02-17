@@ -146,6 +146,48 @@ v1Router.post("/groups/:groupId/remind", requireAuth, (request, response) => {
   response.json({ data });
 });
 
+v1Router.patch("/groups/:groupId/config", requireAuth, (request, response) => {
+  const payload = z
+    .object({
+      contributionAmount: z.number().positive().optional(),
+      gracePeriodDays: z.number().int().min(0).optional(),
+      rules: z.string().min(3).optional(),
+      requiresLeaderApproval: z.boolean().optional(),
+      payoutOrderLogic: z.enum(["fixed", "voting", "priority"]).optional(),
+      totalMembers: z.number().int().min(2).optional(),
+    })
+    .refine((value) => Object.keys(value).length > 0, {
+      message: "At least one configuration field is required.",
+    })
+    .parse(request.body);
+  const data = engine.updateGroupConfig(request.authUser!.id, pathParam(request.params.groupId), payload);
+  response.json({ data });
+});
+
+v1Router.put("/groups/:groupId/payout-order", requireAuth, (request, response) => {
+  const payload = z
+    .object({
+      payoutOrder: z.array(z.string().min(1)).min(1),
+    })
+    .parse(request.body);
+  const data = engine.updatePayoutOrder(
+    request.authUser!.id,
+    pathParam(request.params.groupId),
+    payload.payoutOrder
+  );
+  response.json({ data });
+});
+
+v1Router.patch("/groups/:groupId/chat-moderation", requireAuth, (request, response) => {
+  const payload = z.object({ chatArchived: z.boolean() }).parse(request.body);
+  const data = engine.moderateGroupChat(
+    request.authUser!.id,
+    pathParam(request.params.groupId),
+    payload.chatArchived
+  );
+  response.json({ data });
+});
+
 v1Router.patch("/groups/:groupId/status", requireAuth, requireRole(["admin"]), (request, response) => {
   const payload = z.object({ status: z.enum(["active", "suspended"]) }).parse(request.body);
   const data = engine.updateGroupStatus(
@@ -259,6 +301,19 @@ v1Router.post("/payouts/:payoutId/approve", requireAuth, (request, response) => 
   response.json({ data: result.payout });
 });
 
+v1Router.post("/payouts/:payoutId/reason-review", requireAuth, (request, response) => {
+  const payload = z
+    .object({
+      decision: z.enum(["approve", "reject"]),
+      reason: z.enum(PAYOUT_REASONS).optional(),
+      customReason: z.string().optional(),
+      note: z.string().optional(),
+    })
+    .parse(request.body);
+  const data = engine.reviewPayoutReason(request.authUser!.id, pathParam(request.params.payoutId), payload);
+  response.json({ data });
+});
+
 v1Router.post("/payouts/:payoutId/confirm-recipient", requireAuth, (request, response) => {
   const payload = z
     .object({
@@ -322,6 +377,11 @@ v1Router.post("/groups/:groupId/chat", requireAuth, (request, response) => {
 
 v1Router.post("/chat/:messageId/pin", requireAuth, (request, response) => {
   const data = engine.togglePin(request.authUser!.id, pathParam(request.params.messageId));
+  response.json({ data });
+});
+
+v1Router.delete("/chat/:messageId", requireAuth, (request, response) => {
+  const data = engine.deleteChatMessage(request.authUser!.id, pathParam(request.params.messageId));
   response.json({ data });
 });
 
@@ -488,6 +548,30 @@ v1Router.post("/admin/fraud-flags", requireAuth, requireRole(["admin"]), (reques
   response.status(201).json({ data });
 });
 
+v1Router.get("/admin/fraud-flags", requireAuth, requireRole(["admin"]), (request, response) => {
+  const data = engine.listFraudFlags(request.authUser!.id, {
+    targetType: asString(request.query.targetType),
+    status: asString(request.query.status),
+    query: asString(request.query.query),
+  });
+  response.json({ data });
+});
+
+v1Router.post("/admin/fraud-flags/:flagId/resolve", requireAuth, requireRole(["admin"]), (request, response) => {
+  const payload = z.object({ resolution: z.string().min(3) }).parse(request.body);
+  const data = engine.resolveFraudFlag(
+    request.authUser!.id,
+    pathParam(request.params.flagId),
+    payload.resolution
+  );
+  response.json({ data });
+});
+
+v1Router.get("/admin/compliance/queue", requireAuth, requireRole(["admin"]), (request, response) => {
+  const data = engine.complianceQueue(request.authUser!.id);
+  response.json({ data });
+});
+
 v1Router.post("/admin/disputes/:disputeId/resolve", requireAuth, requireRole(["admin", "leader"]), (request, response) => {
   const data = engine.resolveDispute(request.authUser!.id, pathParam(request.params.disputeId));
   response.json({ data });
@@ -512,6 +596,18 @@ v1Router.get("/admin/audit", requireAuth, requireRole(["admin"]), (request, resp
       content,
     },
   });
+});
+
+v1Router.get("/admin/audit/logs", requireAuth, requireRole(["admin"]), (request, response) => {
+  const data = engine.listAuditLogs(request.authUser!.id, {
+    actorId: asString(request.query.actorId),
+    action: asString(request.query.action),
+    targetType: asString(request.query.targetType),
+    from: asString(request.query.from),
+    to: asString(request.query.to),
+    limit: Number(asString(request.query.limit) ?? 100),
+  });
+  response.json({ data });
 });
 
 function asString(value: unknown): string | undefined {

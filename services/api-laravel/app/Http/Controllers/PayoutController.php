@@ -77,6 +77,19 @@ final class PayoutController extends ApiController
         });
     }
 
+    public function reviewReason(Request $request, string $payoutId): JsonResponse
+    {
+        return $this->execute(function () use ($request, $payoutId): array {
+            $auth = $this->authContext($request);
+            return $this->engine->reviewPayoutReason((string) $auth['user']['id'], $payoutId, [
+                'decision' => (string) $request->input('decision', 'approve'),
+                'reason' => $request->input('reason'),
+                'customReason' => $request->input('customReason'),
+                'note' => $request->input('note'),
+            ]);
+        });
+    }
+
     public function confirmRecipient(Request $request, string $payoutId): JsonResponse
     {
         return $this->execute(function () use ($request, $payoutId): JsonResponse|array {

@@ -1,9 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../src/app.js";
+import { resetEngineForTests } from "../src/domain/index.js";
 
 describe("SusuKonnect API smoke", () => {
   const app = createApp();
+
+  beforeEach(() => {
+    resetEngineForTests();
+  });
 
   it("returns healthy status", async () => {
     const response = await request(app).get("/v1/health");

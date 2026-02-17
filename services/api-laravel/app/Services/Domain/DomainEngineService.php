@@ -448,6 +448,112 @@ final class DomainEngineService
     }
 
     /**
+     * @param array<string,mixed> $input
+     * @return array<string,mixed>
+     */
+    public function updateGroupConfig(string $actorId, string $groupId, array $input): array
+    {
+        $actor = $this->requireUser($actorId);
+        $group = $this->requireGroup($groupId);
+        $this->assertGroupManager($actor, $group);
+        Helpers::assert($group['status'] !== 'completed', 409, 'GROUP_COMPLETED', 'Completed groups cannot be modified.');
+        Helpers::assert($input !== [], 400, 'INVALID_INPUT', 'At least one field is required.');
+
+        if (array_key_exists('totalMembers', $input)) {
+            $totalMembers = (int) $input['totalMembers'];
+            Helpers::assert($totalMembers >= count($group['memberIds']), 400, 'INVALID_GROUP_SIZE', 'Total members must be >= current member count.');
+            $this->mutateGroup($groupId, static function (array &$mutable) use ($totalMembers): void {
+                $mutable['totalMembers'] = $totalMembers;
+            });
+        }
+
+        if (array_key_exists('contributionAmount', $input)) {
+            $amount = (float) $input['contributionAmount'];
+            Helpers::assert($amount > 0, 400, 'INVALID_AMOUNT', 'Contribution amount must be positive.');
+            $amount = Helpers::roundTwo($amount);
+            $this->mutateGroup($groupId, static function (array &$mutable) use ($amount): void {
+                $mutable['contributionAmount'] = $amount;
+            });
+            $current = $this->requireGroup($groupId);
+            foreach ($this->state['contributions'] as &$entry) {
+                if (
+                    $entry['groupId'] === $groupId &&
+                    (int) $entry['cycle'] === (int) $current['cycle'] &&
+                    $entry['status'] !== 'paid'
+                ) {
+                    $entry['amount'] = $amount;
+                }
+            }
+            unset($entry);
+        }
+
+        if (array_key_exists('gracePeriodDays', $input)) {
+            $grace = (int) $input['gracePeriodDays'];
+            Helpers::assert($grace >= 0, 400, 'INVALID_GRACE_PERIOD', 'Grace period must be non-negative.');
+            $this->mutateGroup($groupId, static function (array &$mutable) use ($grace): void {
+                $mutable['gracePeriodDays'] = $grace;
+            });
+        }
+        if (array_key_exists('rules', $input)) {
+            $rules = trim((string) $input['rules']);
+            Helpers::assert(strlen($rules) >= 3, 400, 'INVALID_RULES', 'Group rules are required.');
+            $this->mutateGroup($groupId, static function (array &$mutable) use ($rules): void {
+                $mutable['rules'] = $rules;
+            });
+        }
+        if (array_key_exists('requiresLeaderApproval', $input)) {
+            $requiresLeaderApproval = (bool) $input['requiresLeaderApproval'];
+            $this->mutateGroup($groupId, static function (array &$mutable) use ($requiresLeaderApproval): void {
+                $mutable['requiresLeaderApproval'] = $requiresLeaderApproval;
+            });
+        }
+        if (array_key_exists('payoutOrderLogic', $input)) {
+            $logic = (string) $input['payoutOrderLogic'];
+            Helpers::assert(in_array($logic, ['fixed', 'voting', 'priority'], true), 400, 'INVALID_LOGIC', 'Invalid payout order logic.');
+            $this->mutateGroup($groupId, static function (array &$mutable) use ($logic): void {
+                $mutable['payoutOrderLogic'] = $logic;
+            });
+        }
+
+        $updated = $this->requireGroup($groupId);
+        $this->logAudit($actorId, 'UPDATE_GROUP_CONFIG', 'group', $groupId, [
+            'contributionAmount' => $updated['contributionAmount'],
+            'gracePeriodDays' => $updated['gracePeriodDays'],
+            'requiresLeaderApproval' => $updated['requiresLeaderApproval'],
+            'payoutOrderLogic' => $updated['payoutOrderLogic'],
+            'totalMembers' => $updated['totalMembers'],
+        ]);
+        $this->reconcile();
+        $this->persist();
+        return $this->requireGroup($groupId);
+    }
+
+    /**
+     * @param array<int,string> $payoutOrder
+     * @return array<string,mixed>
+     */
+    public function updatePayoutOrder(string $actorId, string $groupId, array $payoutOrder): array
+    {
+        $actor = $this->requireUser($actorId);
+        $group = $this->requireGroup($groupId);
+        $this->assertGroupManager($actor, $group);
+        Helpers::assert($group['status'] !== 'completed', 409, 'GROUP_COMPLETED', 'Completed groups cannot be modified.');
+        Helpers::assert(count($payoutOrder) === count($group['memberIds']), 400, 'INVALID_PAYOUT_ORDER', 'Payout order must include all members.');
+        Helpers::assert(count(array_unique($payoutOrder)) === count($payoutOrder), 400, 'INVALID_PAYOUT_ORDER', 'Payout order cannot contain duplicates.');
+        foreach ($payoutOrder as $memberId) {
+            Helpers::assert(in_array($memberId, $group['memberIds'], true), 400, 'INVALID_PAYOUT_ORDER', 'Payout order contains non-member.');
+        }
+
+        $this->mutateGroup($groupId, static function (array &$mutable) use ($payoutOrder): void {
+            $mutable['payoutOrder'] = array_values($payoutOrder);
+        });
+        $this->logAudit($actorId, 'UPDATE_PAYOUT_ORDER', 'group', $groupId, ['payoutOrder' => array_values($payoutOrder)]);
+        $this->reconcile();
+        $this->persist();
+        return $this->requireGroup($groupId);
+    }
+
+    /**
      * @return array<int,array<string,mixed>>
      */
     public function listContributions(string $userId, ?string $groupId = null): array
@@ -584,6 +690,7 @@ final class DomainEngineService
             'customReason' => $customReason,
             'status' => 'requested',
             'requestedAt' => Helpers::nowIso(),
+            'reasonReviewStatus' => 'pending',
             'recipientMfaConfirmed' => false,
             'platformFee' => 0.0,
             'netAmount' => 0.0,
@@ -596,6 +703,78 @@ final class DomainEngineService
         $this->logAudit($userId, 'REQUEST_PAYOUT', 'payout', $payout['id'], ['groupId' => $groupId]);
         $this->persist();
         return $payout;
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     */
+    public function reviewPayoutReason(string $actorId, string $payoutId, array $payload): array
+    {
+        $actor = $this->requireUser($actorId);
+        $payout = $this->requirePayout($payoutId);
+        $group = $this->requireGroup((string) $payout['groupId']);
+        Helpers::assert($actor['role'] === 'admin' || $group['leaderId'] === $actorId, 403, 'FORBIDDEN', 'Only admin or group leader can review payout reasons.');
+        Helpers::assert($payout['status'] !== 'released', 409, 'PAYOUT_RELEASED', 'Released payouts cannot be modified.');
+
+        $reason = $payload['reason'] ?? null;
+        if ($reason !== null) {
+            Helpers::assert(in_array((string) $reason, Constants::PAYOUT_REASONS, true), 400, 'INVALID_REASON', 'Unsupported reason.');
+            $this->mutatePayout($payoutId, static function (array &$mutable) use ($reason): void {
+                $mutable['reason'] = (string) $reason;
+                if ($reason !== 'Custom reason') {
+                    $mutable['customReason'] = null;
+                }
+            });
+            $payout = $this->requirePayout($payoutId);
+        }
+
+        $customReason = isset($payload['customReason']) ? trim((string) $payload['customReason']) : null;
+        if ($customReason !== null) {
+            $this->mutatePayout($payoutId, static function (array &$mutable) use ($customReason): void {
+                $mutable['customReason'] = $customReason;
+            });
+            $payout = $this->requirePayout($payoutId);
+        }
+        if (($payout['reason'] ?? '') === 'Custom reason') {
+            Helpers::assert(trim((string) ($payout['customReason'] ?? '')) !== '', 400, 'CUSTOM_REASON_REQUIRED', 'Custom reason details are required.');
+        }
+
+        $decision = (string) ($payload['decision'] ?? 'approve');
+        Helpers::assert(in_array($decision, ['approve', 'reject'], true), 400, 'INVALID_DECISION', 'Decision must be approve or reject.');
+        $note = trim((string) ($payload['note'] ?? ''));
+        $reviewedAt = Helpers::nowIso();
+
+        if ($decision === 'reject') {
+            $this->mutatePayout($payoutId, static function (array &$mutable) use ($actorId, $reviewedAt, $note): void {
+                $mutable['reasonReviewStatus'] = 'rejected';
+                $mutable['reasonReviewedBy'] = $actorId;
+                $mutable['reasonReviewedAt'] = $reviewedAt;
+                $mutable['reasonReviewNote'] = $note;
+                $mutable['status'] = 'rejected';
+            });
+            $updated = $this->requirePayout($payoutId);
+            $this->notify((string) $updated['recipientId'], 'Payout reason rejected', 'Your payout reason for ' . $group['name'] . ' was rejected.', 'payout', 'payout-reason-rejected-' . $payoutId);
+            $this->logAudit($actorId, 'REJECT_PAYOUT_REASON', 'payout', $payoutId, ['note' => $note, 'reason' => $updated['reason']]);
+            $this->persist();
+            return $updated;
+        }
+
+        $this->mutatePayout($payoutId, static function (array &$mutable) use ($actorId, $reviewedAt, $note): void {
+            $mutable['reasonReviewStatus'] = 'approved';
+            $mutable['reasonReviewedBy'] = $actorId;
+            $mutable['reasonReviewedAt'] = $reviewedAt;
+            $mutable['reasonReviewNote'] = $note;
+        });
+        $updated = $this->requirePayout($payoutId);
+        $this->refreshPayoutStatus($group, $updated);
+        $this->mutatePayout($payoutId, static function (array &$mutable) use ($updated): void {
+            $mutable = $updated;
+        });
+        $this->notify((string) $updated['recipientId'], 'Payout reason approved', 'Your payout reason for ' . $group['name'] . ' was approved.', 'payout', 'payout-reason-approved-' . $payoutId);
+        $this->logAudit($actorId, 'APPROVE_PAYOUT_REASON', 'payout', $payoutId, ['note' => $note, 'reason' => $updated['reason']]);
+        $this->persist();
+        return $updated;
     }
 
     public function submitVote(string $userId, string $groupId, string $candidateId, ?string $note = null): void
@@ -651,6 +830,8 @@ final class DomainEngineService
         $payout = $this->requirePayout($payoutId);
         $group = $this->requireGroup((string) $payout['groupId']);
         Helpers::assert($actor['role'] === 'admin' || $group['leaderId'] === $actorId, 403, 'FORBIDDEN', 'Only admin or group leader can approve payout.');
+        Helpers::assert(($payout['status'] ?? 'requested') !== 'rejected', 409, 'PAYOUT_REJECTED', 'Rejected payouts cannot be approved.');
+        Helpers::assert(($payout['reasonReviewStatus'] ?? 'approved') === 'approved', 409, 'PAYOUT_REASON_PENDING', 'Payout reason approval is pending.');
 
         $mfaResult = $this->assertMfa($actorId, 'payout_approve', $payload['mfaChallengeId'] ?? null, $payload['mfaCode'] ?? null);
         if (!$mfaResult['verified']) {
@@ -835,6 +1016,55 @@ final class DomainEngineService
         $this->logAudit($actorId, 'TOGGLE_CHAT_PIN', 'chat', $messageId, ['pinned' => $updated['pinned'] ?? false]);
         $this->persist();
         return $updated ?? [];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    public function moderateGroupChat(string $actorId, string $groupId, bool $chatArchived): array
+    {
+        $actor = $this->requireUser($actorId);
+        $group = $this->requireGroup($groupId);
+        $this->assertGroupManager($actor, $group);
+        Helpers::assert(!($group['status'] === 'completed' && $chatArchived === false), 409, 'GROUP_COMPLETED', 'Completed groups cannot be unarchived.');
+        $this->mutateGroup($groupId, static function (array &$mutable) use ($chatArchived): void {
+            $mutable['chatArchived'] = $chatArchived;
+        });
+        $updated = $this->requireGroup($groupId);
+        $this->logAudit($actorId, $chatArchived ? 'ARCHIVE_GROUP_CHAT' : 'UNARCHIVE_GROUP_CHAT', 'group', $groupId, []);
+        $this->notifyGroup(
+            $updated,
+            $chatArchived ? 'Group chat archived' : 'Group chat reopened',
+            $chatArchived
+                ? 'Chat in ' . $updated['name'] . ' has been archived by moderators.'
+                : 'Chat in ' . $updated['name'] . ' has been reopened by moderators.',
+            'chat',
+            'chat-moderation-' . $groupId . '-' . ($chatArchived ? 'archived' : 'active') . '-' . time()
+        );
+        $this->persist();
+        return $updated;
+    }
+
+    /**
+     * @return array{deleted:bool,messageId:string}
+     */
+    public function deleteChatMessage(string $actorId, string $messageId): array
+    {
+        $actor = $this->requireUser($actorId);
+        $message = $this->firstWhere($this->state['chats'], static fn (array $candidate): bool => $candidate['id'] === $messageId);
+        Helpers::assert($message !== null, 404, 'NOT_FOUND', 'Message not found.');
+        $group = $this->requireGroup((string) $message['groupId']);
+        $this->assertGroupManager($actor, $group);
+        $this->state['chats'] = array_values(array_filter(
+            $this->state['chats'],
+            static fn (array $candidate): bool => $candidate['id'] !== $messageId
+        ));
+        $this->logAudit($actorId, 'DELETE_CHAT_MESSAGE', 'chat', $messageId, [
+            'groupId' => $group['id'],
+            'originalUserId' => $message['userId'],
+        ]);
+        $this->persist();
+        return ['deleted' => true, 'messageId' => $messageId];
     }
 
     /**
@@ -1151,6 +1381,7 @@ final class DomainEngineService
             'targetType' => $targetType,
             'targetId' => $targetId,
             'reason' => $reason,
+            'status' => 'open',
             'createdBy' => $adminId,
             'createdAt' => Helpers::nowIso(),
         ];
@@ -1158,6 +1389,118 @@ final class DomainEngineService
         $this->logAudit($adminId, 'CREATE_FRAUD_FLAG', 'flag', $flag['id'], $input);
         $this->persist();
         return $flag;
+    }
+
+    /**
+     * @param array<string,string|null> $filters
+     * @return array<int,array<string,mixed>>
+     */
+    public function listFraudFlags(string $adminId, array $filters = []): array
+    {
+        $admin = $this->requireUser($adminId);
+        Helpers::assert($admin['role'] === 'admin', 403, 'FORBIDDEN', 'Admin role required.');
+        $targetType = strtolower((string) ($filters['targetType'] ?? ''));
+        $status = strtolower((string) ($filters['status'] ?? ''));
+        $query = strtolower((string) ($filters['query'] ?? ''));
+
+        $items = array_values(array_filter($this->state['fraudFlags'], static function (array $flag) use ($targetType, $status, $query): bool {
+            if ($targetType !== '' && strtolower((string) $flag['targetType']) !== $targetType) {
+                return false;
+            }
+            if ($status !== '' && strtolower((string) ($flag['status'] ?? 'open')) !== $status) {
+                return false;
+            }
+            if ($query !== '') {
+                $haystack = strtolower((string) ($flag['targetId'] . ' ' . $flag['reason']));
+                if (!str_contains($haystack, $query)) {
+                    return false;
+                }
+            }
+            return true;
+        }));
+        usort($items, static fn (array $a, array $b): int => strtotime((string) $b['createdAt']) <=> strtotime((string) $a['createdAt']));
+        return $items;
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    public function resolveFraudFlag(string $adminId, string $flagId, string $resolution): array
+    {
+        $admin = $this->requireUser($adminId);
+        Helpers::assert($admin['role'] === 'admin', 403, 'FORBIDDEN', 'Admin role required.');
+        $flag = $this->firstWhere($this->state['fraudFlags'], static fn (array $candidate): bool => $candidate['id'] === $flagId);
+        Helpers::assert($flag !== null, 404, 'NOT_FOUND', 'Fraud flag not found.');
+        Helpers::assert(($flag['status'] ?? 'open') === 'open', 409, 'FLAG_ALREADY_RESOLVED', 'Fraud flag already resolved.');
+        $resolutionText = trim($resolution);
+        Helpers::assert(strlen($resolutionText) >= 3, 400, 'INVALID_RESOLUTION', 'Resolution details are required.');
+
+        $this->state['fraudFlags'] = array_map(static function (array $candidate) use ($flagId, $adminId, $resolutionText): array {
+            if ($candidate['id'] !== $flagId) {
+                return $candidate;
+            }
+            $candidate['status'] = 'resolved';
+            $candidate['resolvedBy'] = $adminId;
+            $candidate['resolvedAt'] = Helpers::nowIso();
+            $candidate['resolution'] = $resolutionText;
+            return $candidate;
+        }, $this->state['fraudFlags']);
+        $updated = $this->firstWhere($this->state['fraudFlags'], static fn (array $candidate): bool => $candidate['id'] === $flagId);
+        $this->logAudit($adminId, 'RESOLVE_FRAUD_FLAG', 'flag', $flagId, ['resolution' => $resolutionText]);
+        $this->persist();
+        return $updated ?? [];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    public function complianceQueue(string $adminId): array
+    {
+        $admin = $this->requireUser($adminId);
+        Helpers::assert($admin['role'] === 'admin', 403, 'FORBIDDEN', 'Admin role required.');
+        return [
+            'pendingKyc' => array_values(array_filter($this->state['users'], static fn (array $candidate): bool => ($candidate['kyc']['status'] ?? 'unverified') === 'pending')),
+            'openFraudFlags' => array_values(array_filter($this->state['fraudFlags'], static fn (array $flag): bool => ($flag['status'] ?? 'open') === 'open')),
+            'suspendedGroups' => array_values(array_filter($this->state['groups'], static fn (array $group): bool => $group['status'] === 'suspended')),
+            'openDisputes' => array_values(array_filter($this->state['disputes'], static fn (array $dispute): bool => $dispute['status'] === 'open')),
+        ];
+    }
+
+    /**
+     * @param array<string,mixed> $filters
+     * @return array<int,array<string,mixed>>
+     */
+    public function listAuditLogs(string $adminId, array $filters = []): array
+    {
+        $admin = $this->requireUser($adminId);
+        Helpers::assert($admin['role'] === 'admin', 403, 'FORBIDDEN', 'Admin role required.');
+
+        $limitRaw = isset($filters['limit']) ? (int) $filters['limit'] : 100;
+        $limit = max(1, min(500, $limitRaw > 0 ? $limitRaw : 100));
+        $from = isset($filters['from']) && trim((string) $filters['from']) !== '' ? strtotime((string) $filters['from']) : null;
+        $to = isset($filters['to']) && trim((string) $filters['to']) !== '' ? strtotime((string) $filters['to']) : null;
+
+        $items = array_values(array_filter($this->state['auditLogs'], static function (array $entry) use ($filters, $from, $to): bool {
+            if (isset($filters['actorId']) && trim((string) $filters['actorId']) !== '' && $entry['actorId'] !== $filters['actorId']) {
+                return false;
+            }
+            if (isset($filters['action']) && trim((string) $filters['action']) !== '' && $entry['action'] !== $filters['action']) {
+                return false;
+            }
+            if (isset($filters['targetType']) && trim((string) $filters['targetType']) !== '' && $entry['targetType'] !== $filters['targetType']) {
+                return false;
+            }
+            $ts = strtotime((string) $entry['timestamp']);
+            if ($from !== null && $ts < $from) {
+                return false;
+            }
+            if ($to !== null && $ts > $to) {
+                return false;
+            }
+            return true;
+        }));
+        usort($items, static fn (array $a, array $b): int => strtotime((string) $b['timestamp']) <=> strtotime((string) $a['timestamp']));
+        return array_slice($items, 0, $limit);
     }
 
     /**
@@ -1361,11 +1704,16 @@ final class DomainEngineService
      */
     private function refreshPayoutStatus(array $group, array &$payout): void
     {
+        if (($payout['reasonReviewStatus'] ?? null) === 'rejected') {
+            $payout['status'] = 'rejected';
+            return;
+        }
+        $reasonApproved = ($payout['reasonReviewStatus'] ?? 'approved') === 'approved';
         $leaderApproved = $group['requiresLeaderApproval'] ? isset($payout['leaderApprovedBy']) : true;
         $threshold = (float) ($this->state['meta']['adminPayoutApprovalThreshold'] ?? 2000);
         $adminRequired = ((float) $payout['amount']) >= $threshold;
         $adminApproved = $adminRequired ? isset($payout['adminApprovedBy']) : true;
-        $payout['status'] = $leaderApproved && $adminApproved ? 'approved' : 'requested';
+        $payout['status'] = $reasonApproved && $leaderApproved && $adminApproved ? 'approved' : 'requested';
     }
 
     private function rollCycle(string $groupId): void

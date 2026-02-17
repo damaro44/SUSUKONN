@@ -36,4 +36,12 @@ final class ChatController extends ApiController
             return $this->engine->togglePin((string) $auth['user']['id'], $messageId);
         });
     }
+
+    public function destroy(Request $request, string $messageId): JsonResponse
+    {
+        return $this->execute(function () use ($request, $messageId): array {
+            $auth = $this->authContext($request);
+            return $this->engine->deleteChatMessage((string) $auth['user']['id'], $messageId);
+        });
+    }
 }

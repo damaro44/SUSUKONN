@@ -160,6 +160,47 @@ final class DomainEngineParityTest extends TestCase
         self::assertStringContainsString('entries', $audit);
     }
 
+    public function testRoleCapabilityManagementParity(): void
+    {
+        $leader = $this->completeLogin('leader@susukonnect.app', 'Leader@2026', 'leader-manage');
+        $admin = $this->completeLogin('admin@susukonnect.app', 'Admin@2026', 'admin-manage');
+
+        $group = $this->engine->updateGroupConfig((string) $leader['user']['id'], 'grp_fixed_001', [
+            'contributionAmount' => 240,
+            'gracePeriodDays' => 5,
+            'rules' => 'Updated parity rules for cycle management.',
+        ]);
+        self::assertSame(240.0, (float) $group['contributionAmount']);
+        self::assertSame(5, (int) $group['gracePeriodDays']);
+
+        $updatedOrder = $this->engine->updatePayoutOrder((string) $leader['user']['id'], 'grp_fixed_001', ['usr_member', 'usr_leader']);
+        self::assertSame(['usr_member', 'usr_leader'], $updatedOrder['payoutOrder']);
+
+        $requested = $this->engine->requestPayout((string) $leader['user']['id'], 'grp_vote_001', 'Emergency');
+        $reasonReview = $this->engine->reviewPayoutReason((string) $leader['user']['id'], (string) $requested['id'], [
+            'decision' => 'approve',
+            'note' => 'Leader approved payout reason.',
+        ]);
+        self::assertSame('approved', $reasonReview['reasonReviewStatus']);
+
+        $archived = $this->engine->moderateGroupChat((string) $leader['user']['id'], 'grp_fixed_001', true);
+        self::assertTrue((bool) $archived['chatArchived']);
+
+        $flag = $this->engine->createFraudFlag((string) $admin['user']['id'], [
+            'targetType' => 'group',
+            'targetId' => 'grp_fixed_001',
+            'reason' => 'Parity test compliance check',
+        ]);
+        self::assertSame('open', $flag['status']);
+
+        $resolved = $this->engine->resolveFraudFlag((string) $admin['user']['id'], (string) $flag['id'], 'Cleared after review');
+        self::assertSame('resolved', $resolved['status']);
+
+        $queue = $this->engine->complianceQueue((string) $admin['user']['id']);
+        self::assertArrayHasKey('pendingKyc', $queue);
+        self::assertArrayHasKey('openFraudFlags', $queue);
+    }
+
     /**
      * @return array{tokens:array<string,mixed>,user:array<string,mixed>}
      */

@@ -79,6 +79,15 @@ interface CreateGroupInput {
   rules: string;
 }
 
+interface UpdateGroupConfigInput {
+  contributionAmount?: number;
+  gracePeriodDays?: number;
+  rules?: string;
+  requiresLeaderApproval?: boolean;
+  payoutOrderLogic?: "fixed" | "voting" | "priority";
+  totalMembers?: number;
+}
+
 interface KycSubmitInput {
   idType: string;
   idNumber: string;
@@ -119,6 +128,11 @@ export class DomainEngine {
 
   getStateSnapshot(): DomainState {
     return JSON.parse(JSON.stringify(this.state)) as DomainState;
+  }
+
+  resetStateForTests(): void {
+    this.state = seedState();
+    this.reconcile();
   }
 
   register(input: RegisterInput): Pick<User, "id" | "email" | "role" | "fullName"> {
@@ -444,6 +458,81 @@ export class DomainEngine {
     return { reminded: pending.length };
   }
 
+  updateGroupConfig(actorId: string, groupId: string, input: UpdateGroupConfigInput): Group {
+    const actor = this.requireUser(actorId);
+    const group = this.requireGroup(groupId);
+    this.assertGroupManager(actor, group);
+    assert(group.status !== "completed", 409, "GROUP_COMPLETED", "Completed groups cannot be modified.");
+
+    if (typeof input.totalMembers === "number") {
+      assert(
+        Number.isInteger(input.totalMembers) && input.totalMembers >= group.memberIds.length,
+        400,
+        "INVALID_GROUP_SIZE",
+        "Total members must be >= current member count."
+      );
+      group.totalMembers = input.totalMembers;
+    }
+    if (typeof input.contributionAmount === "number") {
+      assert(input.contributionAmount > 0, 400, "INVALID_AMOUNT", "Contribution amount must be positive.");
+      group.contributionAmount = roundTwo(input.contributionAmount);
+      this.state.contributions.forEach((entry) => {
+        if (entry.groupId !== group.id || entry.cycle !== group.cycle || entry.status === "paid") {
+          return;
+        }
+        entry.amount = group.contributionAmount;
+      });
+    }
+    if (typeof input.gracePeriodDays === "number") {
+      assert(
+        Number.isInteger(input.gracePeriodDays) && input.gracePeriodDays >= 0,
+        400,
+        "INVALID_GRACE_PERIOD",
+        "Grace period must be a non-negative integer."
+      );
+      group.gracePeriodDays = input.gracePeriodDays;
+    }
+    if (typeof input.rules === "string") {
+      assert(input.rules.trim().length >= 3, 400, "INVALID_RULES", "Group rules are required.");
+      group.rules = input.rules.trim();
+    }
+    if (typeof input.requiresLeaderApproval === "boolean") {
+      group.requiresLeaderApproval = input.requiresLeaderApproval;
+    }
+    if (input.payoutOrderLogic) {
+      group.payoutOrderLogic = input.payoutOrderLogic;
+    }
+
+    this.logAudit(actorId, "UPDATE_GROUP_CONFIG", "group", group.id, {
+      contributionAmount: group.contributionAmount,
+      gracePeriodDays: group.gracePeriodDays,
+      requiresLeaderApproval: group.requiresLeaderApproval,
+      payoutOrderLogic: group.payoutOrderLogic,
+      totalMembers: group.totalMembers,
+    });
+    this.reconcile();
+    return group;
+  }
+
+  updatePayoutOrder(actorId: string, groupId: string, payoutOrder: string[]): Group {
+    const actor = this.requireUser(actorId);
+    const group = this.requireGroup(groupId);
+    this.assertGroupManager(actor, group);
+    assert(group.status !== "completed", 409, "GROUP_COMPLETED", "Completed groups cannot be modified.");
+    assert(payoutOrder.length === group.memberIds.length, 400, "INVALID_PAYOUT_ORDER", "Payout order must include all members.");
+
+    const orderSet = new Set(payoutOrder);
+    assert(orderSet.size === payoutOrder.length, 400, "INVALID_PAYOUT_ORDER", "Payout order cannot contain duplicates.");
+    payoutOrder.forEach((memberId) => {
+      assert(group.memberIds.includes(memberId), 400, "INVALID_PAYOUT_ORDER", "Payout order contains non-member.");
+    });
+
+    group.payoutOrder = [...payoutOrder];
+    this.logAudit(actorId, "UPDATE_PAYOUT_ORDER", "group", group.id, { payoutOrder: [...group.payoutOrder] });
+    this.reconcile();
+    return group;
+  }
+
   listContributions(userId: string, groupId?: string) {
     const groups = this.groupsForUser(userId).map((group) => group.id);
     return this.state.contributions.filter((entry) => {
@@ -617,6 +706,7 @@ export class DomainEngine {
       customReason,
       status: "requested" as const,
       requestedAt: nowIso(),
+      reasonReviewStatus: "pending" as const,
       recipientMfaConfirmed: false,
       platformFee: 0,
       netAmount: 0,
@@ -643,6 +733,85 @@ export class DomainEngine {
     return payout;
   }
 
+  reviewPayoutReason(
+    actorId: string,
+    payoutId: string,
+    payload: {
+      decision: "approve" | "reject";
+      reason?: PayoutReason;
+      customReason?: string;
+      note?: string;
+    }
+  ) {
+    const actor = this.requireUser(actorId);
+    const payout = this.requirePayout(payoutId);
+    const group = this.requireGroup(payout.groupId);
+    assert(
+      actor.role === "admin" || group.leaderId === actorId,
+      403,
+      "FORBIDDEN",
+      "Only admin or group leader can review payout reasons."
+    );
+    assert(payout.status !== "released", 409, "PAYOUT_RELEASED", "Released payouts cannot be modified.");
+
+    if (payload.reason) {
+      assert(PAYOUT_REASONS.includes(payload.reason), 400, "INVALID_REASON", "Unsupported reason.");
+      payout.reason = payload.reason;
+      if (payload.reason !== "Custom reason") {
+        payout.customReason = undefined;
+      }
+    }
+    if (payload.reason === "Custom reason" || payout.reason === "Custom reason") {
+      assert(
+        Boolean((payload.customReason ?? payout.customReason ?? "").trim()),
+        400,
+        "CUSTOM_REASON_REQUIRED",
+        "Custom reason details are required."
+      );
+    }
+    if (typeof payload.customReason === "string") {
+      payout.customReason = payload.customReason.trim();
+    }
+
+    if (payload.decision === "reject") {
+      payout.reasonReviewStatus = "rejected";
+      payout.reasonReviewedBy = actorId;
+      payout.reasonReviewedAt = nowIso();
+      payout.reasonReviewNote = payload.note?.trim();
+      payout.status = "rejected";
+      this.notify(
+        payout.recipientId,
+        "Payout reason rejected",
+        `Your payout reason for ${group.name} was rejected. ${payload.note?.trim() ?? ""}`.trim(),
+        "payout",
+        `payout-reason-rejected-${payout.id}`
+      );
+      this.logAudit(actorId, "REJECT_PAYOUT_REASON", "payout", payout.id, {
+        note: payload.note?.trim(),
+        reason: payout.reason,
+      });
+      return payout;
+    }
+
+    payout.reasonReviewStatus = "approved";
+    payout.reasonReviewedBy = actorId;
+    payout.reasonReviewedAt = nowIso();
+    payout.reasonReviewNote = payload.note?.trim();
+    this.refreshPayoutStatus(group, payout);
+    this.notify(
+      payout.recipientId,
+      "Payout reason approved",
+      `Your payout reason for ${group.name} was approved.`,
+      "payout",
+      `payout-reason-approved-${payout.id}`
+    );
+    this.logAudit(actorId, "APPROVE_PAYOUT_REASON", "payout", payout.id, {
+      note: payload.note?.trim(),
+      reason: payout.reason,
+    });
+    return payout;
+  }
+
   approvePayout(
     actorId: string,
     payoutId: string,
@@ -656,6 +825,13 @@ export class DomainEngine {
       403,
       "FORBIDDEN",
       "Only admin or group leader can approve payouts."
+    );
+    assert(payout.status !== "rejected", 409, "PAYOUT_REJECTED", "Rejected payouts cannot be approved.");
+    assert(
+      (payout.reasonReviewStatus ?? "approved") === "approved",
+      409,
+      "PAYOUT_REASON_PENDING",
+      "Payout reason approval is pending."
     );
 
     const mfa = this.assertMfa(actorId, "payout_approve", payload.mfaChallengeId, payload.mfaCode);
@@ -828,6 +1004,41 @@ export class DomainEngine {
     message.pinned = !message.pinned;
     this.logAudit(actorId, "TOGGLE_CHAT_PIN", "chat", message.id, { pinned: message.pinned });
     return message;
+  }
+
+  moderateGroupChat(actorId: string, groupId: string, chatArchived: boolean): Group {
+    const actor = this.requireUser(actorId);
+    const group = this.requireGroup(groupId);
+    this.assertGroupManager(actor, group);
+    assert(
+      !(group.status === "completed" && chatArchived === false),
+      409,
+      "GROUP_COMPLETED",
+      "Completed groups cannot be unarchived."
+    );
+    group.chatArchived = chatArchived;
+    this.logAudit(actorId, chatArchived ? "ARCHIVE_GROUP_CHAT" : "UNARCHIVE_GROUP_CHAT", "group", group.id, {});
+    this.notifyGroup(
+      group,
+      chatArchived ? "Group chat archived" : "Group chat reopened",
+      chatArchived
+        ? `Chat in ${group.name} has been archived by moderators.`
+        : `Chat in ${group.name} has been reopened by moderators.`,
+      "chat",
+      `chat-moderation-${group.id}-${chatArchived ? "archived" : "active"}-${Date.now()}`
+    );
+    return group;
+  }
+
+  deleteChatMessage(actorId: string, messageId: string): { deleted: true; messageId: string } {
+    const actor = this.requireUser(actorId);
+    const message = this.state.chats.find((item) => item.id === messageId);
+    assert(message, 404, "NOT_FOUND", "Message not found.");
+    const group = this.requireGroup(message.groupId);
+    this.assertGroupManager(actor, group);
+    this.state.chats = this.state.chats.filter((item) => item.id !== messageId);
+    this.logAudit(actorId, "DELETE_CHAT_MESSAGE", "chat", messageId, { groupId: group.id, originalUserId: message.userId });
+    return { deleted: true, messageId };
   }
 
   calendarEvents(userId: string) {
@@ -1069,12 +1280,107 @@ export class DomainEngine {
       targetType: input.targetType,
       targetId: input.targetId,
       reason: input.reason,
+      status: "open" as const,
       createdBy: adminId,
       createdAt: nowIso(),
     };
     this.state.fraudFlags.push(flag);
     this.logAudit(adminId, "CREATE_FRAUD_FLAG", "flag", flag.id, input);
     return flag;
+  }
+
+  listFraudFlags(adminId: string, filters: { targetType?: string; status?: string; query?: string }) {
+    const admin = this.requireUser(adminId);
+    assert(admin.role === "admin", 403, "FORBIDDEN", "Admin role required.");
+    const targetType = (filters.targetType ?? "").toLowerCase();
+    const status = (filters.status ?? "").toLowerCase();
+    const query = (filters.query ?? "").toLowerCase();
+
+    return this.state.fraudFlags
+      .filter((flag) => {
+        if (targetType && flag.targetType.toLowerCase() !== targetType) {
+          return false;
+        }
+        if (status && (flag.status ?? "open").toLowerCase() !== status) {
+          return false;
+        }
+        if (query) {
+          const haystack = `${flag.targetId} ${flag.reason}`.toLowerCase();
+          if (!haystack.includes(query)) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  resolveFraudFlag(adminId: string, flagId: string, resolution: string) {
+    const admin = this.requireUser(adminId);
+    assert(admin.role === "admin", 403, "FORBIDDEN", "Admin role required.");
+    const flag = this.state.fraudFlags.find((entry) => entry.id === flagId);
+    assert(flag, 404, "NOT_FOUND", "Fraud flag not found.");
+    assert((flag.status ?? "open") === "open", 409, "FLAG_ALREADY_RESOLVED", "Fraud flag already resolved.");
+    assert(resolution.trim().length >= 3, 400, "INVALID_RESOLUTION", "Resolution details are required.");
+    flag.status = "resolved";
+    flag.resolvedBy = adminId;
+    flag.resolvedAt = nowIso();
+    flag.resolution = resolution.trim();
+    this.logAudit(adminId, "RESOLVE_FRAUD_FLAG", "flag", flag.id, { resolution: flag.resolution });
+    return flag;
+  }
+
+  complianceQueue(adminId: string) {
+    const admin = this.requireUser(adminId);
+    assert(admin.role === "admin", 403, "FORBIDDEN", "Admin role required.");
+    return {
+      pendingKyc: this.state.users.filter((candidate) => candidate.kyc.status === "pending"),
+      openFraudFlags: this.state.fraudFlags.filter((flag) => (flag.status ?? "open") === "open"),
+      suspendedGroups: this.state.groups.filter((group) => group.status === "suspended"),
+      openDisputes: this.state.disputes.filter((dispute) => dispute.status === "open"),
+    };
+  }
+
+  listAuditLogs(
+    adminId: string,
+    filters: {
+      actorId?: string;
+      action?: string;
+      targetType?: string;
+      from?: string;
+      to?: string;
+      limit?: number;
+    }
+  ) {
+    const admin = this.requireUser(adminId);
+    assert(admin.role === "admin", 403, "FORBIDDEN", "Admin role required.");
+    const parsedLimit = Number(filters.limit ?? 100);
+    const limit = Math.max(1, Math.min(500, Number.isFinite(parsedLimit) ? parsedLimit : 100));
+    const from = filters.from ? new Date(filters.from).getTime() : null;
+    const to = filters.to ? new Date(filters.to).getTime() : null;
+
+    return this.state.auditLogs
+      .filter((entry) => {
+        if (filters.actorId && entry.actorId !== filters.actorId) {
+          return false;
+        }
+        if (filters.action && entry.action !== filters.action) {
+          return false;
+        }
+        if (filters.targetType && entry.targetType !== filters.targetType) {
+          return false;
+        }
+        const ts = new Date(entry.timestamp).getTime();
+        if (from !== null && ts < from) {
+          return false;
+        }
+        if (to !== null && ts > to) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, limit);
   }
 
   resolveDispute(actorId: string, disputeId: string) {
@@ -1330,10 +1636,15 @@ export class DomainEngine {
   }
 
   private refreshPayoutStatus(group: Group, payout: (typeof this.state.payouts)[number]) {
+    if (payout.reasonReviewStatus === "rejected") {
+      payout.status = "rejected";
+      return;
+    }
+    const reasonApproved = (payout.reasonReviewStatus ?? "approved") === "approved";
     const leaderApproved = group.requiresLeaderApproval ? Boolean(payout.leaderApprovedBy) : true;
     const adminRequired = payout.amount >= env.ADMIN_PAYOUT_APPROVAL_THRESHOLD;
     const adminApproved = adminRequired ? Boolean(payout.adminApprovedBy) : true;
-    payout.status = leaderApproved && adminApproved ? "approved" : "requested";
+    payout.status = reasonApproved && leaderApproved && adminApproved ? "approved" : "requested";
   }
 
   private rollCycle(group: Group) {
@@ -1889,6 +2200,9 @@ function seedState(): DomainState {
         reason: "Medical procedure",
         status: "requested",
         requestedAt: nowIso(),
+        reasonReviewStatus: "approved",
+        reasonReviewedBy: leader.id,
+        reasonReviewedAt: nowIso(),
         leaderApprovedBy: leader.id,
         recipientMfaConfirmed: false,
         platformFee: 0,

@@ -39,6 +39,9 @@ Route::prefix('v1')->group(function () {
     Route::post('/groups/{groupId}/join', [GroupController::class, 'join']);
     Route::post('/groups/{groupId}/join-requests/{userId}/decision', [GroupController::class, 'reviewJoinRequest']);
     Route::post('/groups/{groupId}/remind', [GroupController::class, 'sendReminders']);
+    Route::patch('/groups/{groupId}/config', [GroupController::class, 'updateConfig']);
+    Route::put('/groups/{groupId}/payout-order', [GroupController::class, 'updatePayoutOrder']);
+    Route::patch('/groups/{groupId}/chat-moderation', [GroupController::class, 'moderateChat']);
     Route::patch('/groups/{groupId}/status', [GroupController::class, 'updateStatus']);
 
     Route::get('/contributions', [ContributionController::class, 'index']);
@@ -49,12 +52,14 @@ Route::prefix('v1')->group(function () {
     Route::post('/groups/{groupId}/votes', [PayoutController::class, 'vote']);
     Route::post('/groups/{groupId}/priority-claims', [PayoutController::class, 'priorityClaim']);
     Route::post('/payouts/{payoutId}/approve', [PayoutController::class, 'approve']);
+    Route::post('/payouts/{payoutId}/reason-review', [PayoutController::class, 'reviewReason']);
     Route::post('/payouts/{payoutId}/confirm-recipient', [PayoutController::class, 'confirmRecipient']);
     Route::post('/payouts/{payoutId}/release', [PayoutController::class, 'release']);
 
     Route::get('/groups/{groupId}/chat', [ChatController::class, 'index']);
     Route::post('/groups/{groupId}/chat', [ChatController::class, 'store']);
     Route::post('/chat/{messageId}/pin', [ChatController::class, 'togglePin']);
+    Route::delete('/chat/{messageId}', [ChatController::class, 'destroy']);
 
     Route::get('/calendar/events', [CalendarController::class, 'index']);
 
@@ -75,8 +80,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/overview', [AdminController::class, 'overview']);
         Route::post('/kyc/{userId}/review', [AdminController::class, 'reviewKyc']);
         Route::post('/fraud-flags', [AdminController::class, 'createFraudFlag']);
+        Route::get('/fraud-flags', [AdminController::class, 'listFraudFlags']);
+        Route::post('/fraud-flags/{flagId}/resolve', [AdminController::class, 'resolveFraudFlag']);
+        Route::get('/compliance/queue', [AdminController::class, 'complianceQueue']);
         Route::post('/disputes/{disputeId}/resolve', [AdminController::class, 'resolveDispute']);
         Route::get('/export', [AdminController::class, 'exportReport']);
         Route::get('/audit', [AdminController::class, 'exportAudit']);
+        Route::get('/audit/logs', [AdminController::class, 'auditLogs']);
     });
 });

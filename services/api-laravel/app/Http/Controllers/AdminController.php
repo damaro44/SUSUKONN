@@ -44,6 +44,41 @@ final class AdminController extends ApiController
         }, 201);
     }
 
+    public function listFraudFlags(Request $request): JsonResponse
+    {
+        return $this->execute(function () use ($request): array {
+            $auth = $this->authContext($request);
+            $this->requireRole($auth['user'], ['admin']);
+            return $this->engine->listFraudFlags((string) $auth['user']['id'], [
+                'targetType' => $request->query('targetType'),
+                'status' => $request->query('status'),
+                'query' => $request->query('query'),
+            ]);
+        });
+    }
+
+    public function resolveFraudFlag(Request $request, string $flagId): JsonResponse
+    {
+        return $this->execute(function () use ($request, $flagId): array {
+            $auth = $this->authContext($request);
+            $this->requireRole($auth['user'], ['admin']);
+            return $this->engine->resolveFraudFlag(
+                (string) $auth['user']['id'],
+                $flagId,
+                (string) $request->input('resolution', '')
+            );
+        });
+    }
+
+    public function complianceQueue(Request $request): JsonResponse
+    {
+        return $this->execute(function () use ($request): array {
+            $auth = $this->authContext($request);
+            $this->requireRole($auth['user'], ['admin']);
+            return $this->engine->complianceQueue((string) $auth['user']['id']);
+        });
+    }
+
     public function resolveDispute(Request $request, string $disputeId): JsonResponse
     {
         return $this->execute(function () use ($request, $disputeId): array {
@@ -75,6 +110,22 @@ final class AdminController extends ApiController
                 'format' => 'json',
                 'content' => $this->engine->exportAudit((string) $auth['user']['id']),
             ];
+        });
+    }
+
+    public function auditLogs(Request $request): JsonResponse
+    {
+        return $this->execute(function () use ($request): array {
+            $auth = $this->authContext($request);
+            $this->requireRole($auth['user'], ['admin']);
+            return $this->engine->listAuditLogs((string) $auth['user']['id'], [
+                'actorId' => $request->query('actorId'),
+                'action' => $request->query('action'),
+                'targetType' => $request->query('targetType'),
+                'from' => $request->query('from'),
+                'to' => $request->query('to'),
+                'limit' => $request->query('limit'),
+            ]);
         });
     }
 }
