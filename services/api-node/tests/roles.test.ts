@@ -164,6 +164,18 @@ describe("role capabilities", () => {
   it("allows admins to run compliance, fraud, disputes, and audit operations", async () => {
     const adminToken = await login("admin@susukonnect.app", "Admin@2026", "admin-ops-device");
     const memberToken = await login("member@susukonnect.app", "Member@2026", "member-dispute-device");
+    const signupEmail = `cleanup.${Date.now()}@susukonnect.app`;
+
+    const signup = await request(app).post("/v1/auth/register").send({
+      fullName: "Cleanup User",
+      email: signupEmail,
+      phone: "+15557778888",
+      password: "Cleanup123",
+      role: "member",
+      acceptTerms: true,
+    });
+    expect(signup.status).toBe(201);
+    const signupUserId = signup.body.data.id as string;
 
     const fraud = await request(app)
       .post("/v1/admin/fraud-flags")
@@ -222,6 +234,22 @@ describe("role capabilities", () => {
     expect(queue.status).toBe(200);
     expect(queue.body.data).toHaveProperty("pendingKyc");
     expect(queue.body.data).toHaveProperty("openFraudFlags");
+
+    const purge = await request(app)
+      .post("/v1/admin/users/purge-signups")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({});
+    expect(purge.status).toBe(200);
+    expect(purge.body.data.deletedCount).toBeGreaterThanOrEqual(1);
+    expect(purge.body.data.deletedUserIds).toContain(signupUserId);
+
+    const loginAfterPurge = await request(app).post("/v1/auth/login").send({
+      email: signupEmail,
+      password: "Cleanup123",
+      deviceId: "cleanup-device",
+    });
+    expect(loginAfterPurge.status).toBe(401);
+    expect(loginAfterPurge.body.error.code).toBe("INVALID_CREDENTIALS");
 
     const auditLogs = await request(app)
       .get("/v1/admin/audit/logs?action=CREATE_FRAUD_FLAG&limit=5")

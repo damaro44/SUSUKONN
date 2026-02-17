@@ -1450,6 +1450,132 @@ final class DomainEngineService
     }
 
     /**
+     * @return array{deletedCount:int,deletedUserIds:array<int,string>,deletedGroupIds:array<int,string>}
+     */
+    public function purgeSignupAccounts(string $adminId): array
+    {
+        $admin = $this->requireUser($adminId);
+        Helpers::assert($admin['role'] === 'admin', 403, 'FORBIDDEN', 'Admin role required.');
+        $systemUserIds = ['usr_admin', 'usr_leader', 'usr_member', 'usr_pending'];
+
+        $deletedUsers = array_values(array_filter(
+            $this->state['users'],
+            static fn (array $user): bool => !in_array((string) $user['id'], $systemUserIds, true)
+        ));
+        $deletedUserIds = array_map(static fn (array $user): string => (string) $user['id'], $deletedUsers);
+        $deletedEmails = array_map(static fn (array $user): string => (string) $user['email'], $deletedUsers);
+
+        if ($deletedUserIds === []) {
+            $this->logAudit($adminId, 'PURGE_SIGNUP_ACCOUNTS', 'system', 'signup_accounts', ['deletedCount' => 0]);
+            $this->persist();
+            return [
+                'deletedCount' => 0,
+                'deletedUserIds' => [],
+                'deletedGroupIds' => [],
+            ];
+        }
+
+        $userSet = array_fill_keys($deletedUserIds, true);
+        $this->state['users'] = array_values(array_filter(
+            $this->state['users'],
+            static fn (array $user): bool => !isset($userSet[(string) $user['id']])
+        ));
+        $this->state['sessions'] = array_values(array_filter(
+            $this->state['sessions'],
+            static fn (array $session): bool => !isset($userSet[(string) $session['userId']])
+        ));
+        $this->state['mfaChallenges'] = array_values(array_filter(
+            $this->state['mfaChallenges'],
+            static fn (array $challenge): bool => !isset($userSet[(string) $challenge['userId']])
+        ));
+        $this->state['contactVerifications'] = array_values(array_filter(
+            $this->state['contactVerifications'],
+            static fn (array $challenge): bool => !isset($userSet[(string) $challenge['userId']])
+        ));
+        $this->state['notifications'] = array_values(array_filter(
+            $this->state['notifications'],
+            static fn (array $note): bool => !isset($userSet[(string) $note['userId']])
+        ));
+        $this->state['fraudFlags'] = array_values(array_filter(
+            $this->state['fraudFlags'],
+            static fn (array $flag): bool => !($flag['targetType'] === 'user' && isset($userSet[(string) $flag['targetId']]))
+        ));
+
+        $updatedGroups = [];
+        $deletedGroupIds = [];
+        foreach ($this->state['groups'] as $group) {
+            $group['joinRequests'] = array_values(array_filter(
+                $group['joinRequests'],
+                static fn (string $userId): bool => !isset($userSet[$userId])
+            ));
+            $group['memberIds'] = array_values(array_filter(
+                $group['memberIds'],
+                static fn (string $userId): bool => !isset($userSet[$userId])
+            ));
+            $group['payoutOrder'] = array_values(array_filter(
+                $group['payoutOrder'],
+                static fn (string $userId): bool => !isset($userSet[$userId])
+            ));
+            if (isset($userSet[(string) $group['leaderId']]) || count($group['memberIds']) === 0) {
+                $deletedGroupIds[] = (string) $group['id'];
+                continue;
+            }
+            $updatedGroups[] = $group;
+        }
+        $this->state['groups'] = $updatedGroups;
+        $groupSet = array_fill_keys($deletedGroupIds, true);
+
+        $this->state['contributions'] = array_values(array_filter(
+            $this->state['contributions'],
+            static fn (array $entry): bool => !isset($userSet[(string) $entry['userId']]) && !isset($groupSet[(string) $entry['groupId']])
+        ));
+        $this->state['payoutVotes'] = array_values(array_filter(
+            $this->state['payoutVotes'],
+            static fn (array $entry): bool =>
+                !isset($groupSet[(string) $entry['groupId']]) &&
+                !isset($userSet[(string) $entry['voterId']]) &&
+                !isset($userSet[(string) $entry['candidateId']])
+        ));
+        $this->state['priorityClaims'] = array_values(array_filter(
+            $this->state['priorityClaims'],
+            static fn (array $entry): bool => !isset($groupSet[(string) $entry['groupId']]) && !isset($userSet[(string) $entry['userId']])
+        ));
+        $this->state['payouts'] = array_values(array_filter(
+            $this->state['payouts'],
+            static fn (array $entry): bool =>
+                !isset($groupSet[(string) $entry['groupId']]) &&
+                !isset($userSet[(string) $entry['recipientId']]) &&
+                (!isset($entry['leaderApprovedBy']) || !isset($userSet[(string) $entry['leaderApprovedBy']])) &&
+                (!isset($entry['adminApprovedBy']) || !isset($userSet[(string) $entry['adminApprovedBy']])) &&
+                (!isset($entry['reasonReviewedBy']) || !isset($userSet[(string) $entry['reasonReviewedBy']]))
+        ));
+        $this->state['chats'] = array_values(array_filter(
+            $this->state['chats'],
+            static fn (array $entry): bool => !isset($groupSet[(string) $entry['groupId']]) && !isset($userSet[(string) $entry['userId']])
+        ));
+        $this->state['disputes'] = array_values(array_filter(
+            $this->state['disputes'],
+            static fn (array $entry): bool => !isset($groupSet[(string) $entry['groupId']]) && !isset($userSet[(string) $entry['reporterId']])
+        ));
+        foreach ($deletedEmails as $email) {
+            unset($this->state['authControls']['loginAttempts'][$email]);
+        }
+
+        $this->logAudit($adminId, 'PURGE_SIGNUP_ACCOUNTS', 'system', 'signup_accounts', [
+            'deletedCount' => count($deletedUserIds),
+            'deletedUserIds' => $deletedUserIds,
+            'deletedGroupIds' => $deletedGroupIds,
+        ]);
+        $this->reconcile();
+        $this->persist();
+        return [
+            'deletedCount' => count($deletedUserIds),
+            'deletedUserIds' => $deletedUserIds,
+            'deletedGroupIds' => $deletedGroupIds,
+        ];
+    }
+
+    /**
      * @return array<string,mixed>
      */
     public function reviewKyc(string $adminId, string $targetUserId, string $status): array

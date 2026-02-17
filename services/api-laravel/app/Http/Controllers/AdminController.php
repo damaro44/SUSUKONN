@@ -18,6 +18,15 @@ final class AdminController extends ApiController
         });
     }
 
+    public function purgeSignupAccounts(Request $request): JsonResponse
+    {
+        return $this->execute(function () use ($request): array {
+            $auth = $this->authContext($request);
+            $this->requireRole($auth['user'], ['admin']);
+            return $this->engine->purgeSignupAccounts((string) $auth['user']['id']);
+        });
+    }
+
     public function reviewKyc(Request $request, string $userId): JsonResponse
     {
         return $this->execute(function () use ($request, $userId): array {

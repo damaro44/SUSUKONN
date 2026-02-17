@@ -36,6 +36,8 @@ const MFA_REQUIRED_ACTIONS = new Set([
   "login",
 ]);
 
+const SYSTEM_USER_IDS = new Set(["usr_admin", "usr_leader", "usr_member", "usr_pending"]);
+
 interface MfaCheckResult {
   verified: boolean;
   challengeId?: string;
@@ -1351,6 +1353,42 @@ export class DomainEngine {
     };
   }
 
+  purgeSignupAccounts(adminId: string) {
+    const admin = this.requireUser(adminId);
+    assert(admin.role === "admin", 403, "FORBIDDEN", "Admin role required.");
+
+    const deletedUsers = this.state.users.filter((user) => !SYSTEM_USER_IDS.has(user.id));
+    const deletedUserIds = deletedUsers.map((user) => user.id);
+    const deletedEmails = deletedUsers.map((user) => user.email);
+    if (deletedUserIds.length === 0) {
+      this.logAudit(adminId, "PURGE_SIGNUP_ACCOUNTS", "system", "signup_accounts", {
+        deletedCount: 0,
+      });
+      return {
+        deletedCount: 0,
+        deletedUserIds: [] as string[],
+        deletedGroupIds: [] as string[],
+      };
+    }
+
+    const deletedGroupIds = this.removeUsersCascade(deletedUserIds);
+    deletedEmails.forEach((email) => {
+      delete this.state.authControls.loginAttempts[email];
+    });
+
+    this.logAudit(adminId, "PURGE_SIGNUP_ACCOUNTS", "system", "signup_accounts", {
+      deletedCount: deletedUserIds.length,
+      deletedUserIds,
+      deletedGroupIds,
+    });
+    this.reconcile();
+    return {
+      deletedCount: deletedUserIds.length,
+      deletedUserIds,
+      deletedGroupIds,
+    };
+  }
+
   reviewKyc(adminId: string, targetUserId: string, status: "verified" | "rejected") {
     const admin = this.requireUser(adminId);
     assert(admin.role === "admin", 403, "FORBIDDEN", "Admin role required.");
@@ -1892,6 +1930,66 @@ export class DomainEngine {
 
   private adminUsers() {
     return this.state.users.filter((user) => user.role === "admin");
+  }
+
+  private removeUsersCascade(userIds: string[]): string[] {
+    const userSet = new Set(userIds);
+
+    this.state.users = this.state.users.filter((user) => !userSet.has(user.id));
+    this.state.sessions = this.state.sessions.filter((session) => !userSet.has(session.userId));
+    this.state.mfaChallenges = this.state.mfaChallenges.filter((challenge) => !userSet.has(challenge.userId));
+    this.state.contactVerifications = this.state.contactVerifications.filter(
+      (challenge) => !userSet.has(challenge.userId)
+    );
+    this.state.notifications = this.state.notifications.filter((note) => !userSet.has(note.userId));
+    this.state.fraudFlags = this.state.fraudFlags.filter(
+      (flag) => !(flag.targetType === "user" && userSet.has(flag.targetId))
+    );
+
+    const deletedGroupIds = new Set<string>();
+    this.state.groups.forEach((group) => {
+      group.joinRequests = group.joinRequests.filter((userId) => !userSet.has(userId));
+      group.memberIds = group.memberIds.filter((userId) => !userSet.has(userId));
+      group.payoutOrder = group.payoutOrder.filter((userId) => !userSet.has(userId));
+      if (userSet.has(group.leaderId) || group.memberIds.length === 0) {
+        deletedGroupIds.add(group.id);
+      }
+    });
+    this.state.groups = this.state.groups.filter((group) => !deletedGroupIds.has(group.id));
+
+    this.state.contributions = this.state.contributions.filter(
+      (entry) => !userSet.has(entry.userId) && !deletedGroupIds.has(entry.groupId)
+    );
+    this.state.payoutVotes = this.state.payoutVotes.filter(
+      (entry) =>
+        !deletedGroupIds.has(entry.groupId) && !userSet.has(entry.voterId) && !userSet.has(entry.candidateId)
+    );
+    this.state.priorityClaims = this.state.priorityClaims.filter(
+      (entry) => !deletedGroupIds.has(entry.groupId) && !userSet.has(entry.userId)
+    );
+    this.state.payouts = this.state.payouts.filter((entry) => {
+      if (deletedGroupIds.has(entry.groupId) || userSet.has(entry.recipientId)) {
+        return false;
+      }
+      if (entry.leaderApprovedBy && userSet.has(entry.leaderApprovedBy)) {
+        return false;
+      }
+      if (entry.adminApprovedBy && userSet.has(entry.adminApprovedBy)) {
+        return false;
+      }
+      if (entry.reasonReviewedBy && userSet.has(entry.reasonReviewedBy)) {
+        return false;
+      }
+      return true;
+    });
+    this.state.chats = this.state.chats.filter(
+      (entry) => !deletedGroupIds.has(entry.groupId) && !userSet.has(entry.userId)
+    );
+    this.state.disputes = this.state.disputes.filter(
+      (entry) => !deletedGroupIds.has(entry.groupId) && !userSet.has(entry.reporterId)
+    );
+
+    return [...deletedGroupIds];
   }
 
   private reconcile() {

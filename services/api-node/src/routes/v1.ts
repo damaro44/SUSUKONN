@@ -578,6 +578,11 @@ v1Router.get("/admin/overview", requireAuth, requireRole(["admin"]), (request, r
   response.json({ data });
 });
 
+v1Router.post("/admin/users/purge-signups", requireAuth, requireRole(["admin"]), (request, response) => {
+  const data = engine.purgeSignupAccounts(request.authUser!.id);
+  response.json({ data });
+});
+
 v1Router.post("/admin/kyc/:userId/review", requireAuth, requireRole(["admin"]), (request, response) => {
   const payload = z.object({ status: z.enum(["verified", "rejected"]) }).parse(request.body);
   const data = engine.reviewKyc(request.authUser!.id, pathParam(request.params.userId), payload.status);

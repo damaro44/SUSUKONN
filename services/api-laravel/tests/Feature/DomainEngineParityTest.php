@@ -283,6 +283,37 @@ final class DomainEngineParityTest extends TestCase
         self::assertArrayHasKey('tokens', $biometricLogin);
     }
 
+    public function testAdminCanPurgeSignupAccountsParity(): void
+    {
+        $admin = $this->completeLogin('admin@susukonnect.app', 'Admin@2026', 'admin-purge-device');
+        $email = 'cleanup.user+' . uniqid('', true) . '@susukonnect.app';
+
+        $signup = $this->engine->register([
+            'fullName' => 'Cleanup User',
+            'email' => $email,
+            'phone' => '+15552223333',
+            'password' => 'Cleanup123',
+            'role' => 'member',
+            'acceptTerms' => true,
+        ]);
+        self::assertNotEmpty($signup['id']);
+
+        $purge = $this->engine->purgeSignupAccounts((string) $admin['user']['id']);
+        self::assertGreaterThanOrEqual(1, (int) $purge['deletedCount']);
+        self::assertContains((string) $signup['id'], $purge['deletedUserIds']);
+
+        try {
+            $this->engine->login([
+                'email' => $email,
+                'password' => 'Cleanup123',
+                'deviceId' => 'cleanup-device',
+            ]);
+            self::fail('Expected deleted account login to fail.');
+        } catch (DomainHttpException $exception) {
+            self::assertSame('INVALID_CREDENTIALS', $exception->errorCode());
+        }
+    }
+
     /**
      * @return array{tokens:array<string,mixed>,user:array<string,mixed>}
      */

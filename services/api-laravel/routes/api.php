@@ -81,6 +81,7 @@ Route::prefix('v1')->group(function () {
 
     Route::prefix('/admin')->group(function () {
         Route::get('/overview', [AdminController::class, 'overview']);
+        Route::post('/users/purge-signups', [AdminController::class, 'purgeSignupAccounts']);
         Route::post('/kyc/{userId}/review', [AdminController::class, 'reviewKyc']);
         Route::post('/fraud-flags', [AdminController::class, 'createFraudFlag']);
         Route::get('/fraud-flags', [AdminController::class, 'listFraudFlags']);
