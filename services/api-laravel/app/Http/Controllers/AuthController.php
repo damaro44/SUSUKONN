@@ -23,11 +23,14 @@ final class AuthController extends ApiController
 
     public function verifyContact(Request $request): JsonResponse
     {
-        return $this->execute(fn (): array => $this->engine->verifyOnboardingContact([
-            'challengeId' => (string) $request->input('challengeId', ''),
-            'code' => (string) $request->input('code', ''),
-            'channel' => $request->input('channel'),
-        ]));
+        return $this->execute(function () use ($request): array {
+            $channel = $request->input('channel');
+            return $this->engine->verifyOnboardingContact([
+                'challengeId' => (string) $request->input('challengeId', ''),
+                'code' => (string) $request->input('code', ''),
+                'channel' => is_string($channel) ? $channel : null,
+            ]);
+        });
     }
 
     public function resendContactVerification(Request $request): JsonResponse
