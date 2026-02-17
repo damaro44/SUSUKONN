@@ -164,6 +164,7 @@ final class DomainEngineParityTest extends TestCase
     {
         $leader = $this->completeLogin('leader@susukonnect.app', 'Leader@2026', 'leader-manage');
         $admin = $this->completeLogin('admin@susukonnect.app', 'Admin@2026', 'admin-manage');
+        $member = $this->completeLogin('member@susukonnect.app', 'Member@2026', 'member-manage');
 
         $group = $this->engine->updateGroupConfig((string) $leader['user']['id'], 'grp_fixed_001', [
             'contributionAmount' => 240,
@@ -176,7 +177,7 @@ final class DomainEngineParityTest extends TestCase
         $updatedOrder = $this->engine->updatePayoutOrder((string) $leader['user']['id'], 'grp_fixed_001', ['usr_member', 'usr_leader']);
         self::assertSame(['usr_member', 'usr_leader'], $updatedOrder['payoutOrder']);
 
-        $requested = $this->engine->requestPayout((string) $leader['user']['id'], 'grp_vote_001', 'Emergency');
+        $requested = $this->engine->requestPayout((string) $member['user']['id'], 'grp_vote_001', 'Emergency');
         $reasonReview = $this->engine->reviewPayoutReason((string) $leader['user']['id'], (string) $requested['id'], [
             'decision' => 'approve',
             'note' => 'Leader approved payout reason.',
