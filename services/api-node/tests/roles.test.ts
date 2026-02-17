@@ -88,6 +88,7 @@ describe("role capabilities", () => {
 
   it("allows leaders to manage groups, payout reasons, and chat moderation", async () => {
     const leaderToken = await login("leader@susukonnect.app", "Leader@2026", "leader-manage-device");
+    const memberToken = await login("member@susukonnect.app", "Member@2026", "member-request-device");
 
     const config = await request(app)
       .patch("/v1/groups/grp_fixed_001/config")
@@ -113,7 +114,7 @@ describe("role capabilities", () => {
 
     const requested = await request(app)
       .post("/v1/groups/grp_vote_001/payouts/request")
-      .set("Authorization", `Bearer ${leaderToken}`)
+      .set("Authorization", `Bearer ${memberToken}`)
       .send({
         reason: "Emergency",
       });
