@@ -8,6 +8,7 @@ use App\Services\Domain\DomainEngineService;
 use App\Services\Domain\DomainStateRepository;
 use App\Services\Providers\KycProviderInterface;
 use App\Services\Providers\PaymentGatewayInterface;
+use App\Support\Domain\Exceptions\DomainHttpException;
 use PHPUnit\Framework\TestCase;
 
 final class DomainEngineParityTest extends TestCase
@@ -200,6 +201,86 @@ final class DomainEngineParityTest extends TestCase
         $queue = $this->engine->complianceQueue((string) $admin['user']['id']);
         self::assertArrayHasKey('pendingKyc', $queue);
         self::assertArrayHasKey('openFraudFlags', $queue);
+    }
+
+    public function testHighTrustOnboardingAndBiometricParity(): void
+    {
+        $email = 'new.user+' . uniqid('', true) . '@susukonnect.app';
+        $password = 'Password123';
+        $registration = $this->engine->register([
+            'fullName' => 'New User',
+            'email' => $email,
+            'phone' => '+15551112222',
+            'password' => $password,
+            'role' => 'member',
+            'acceptTerms' => true,
+        ]);
+        self::assertArrayHasKey('contactVerification', $registration);
+        self::assertNotEmpty($registration['contactVerification']['email']['challengeId']);
+        self::assertNotEmpty($registration['contactVerification']['phone']['challengeId']);
+
+        try {
+            $this->engine->login([
+                'email' => $email,
+                'password' => $password,
+                'deviceId' => 'onboarding-device',
+            ]);
+            self::fail('Expected contact verification guard to block login.');
+        } catch (DomainHttpException $exception) {
+            self::assertSame('CONTACT_UNVERIFIED', $exception->errorCode());
+        }
+
+        $verifyEmail = $this->engine->verifyOnboardingContact([
+            'challengeId' => (string) $registration['contactVerification']['email']['challengeId'],
+            'code' => (string) $registration['contactVerification']['email']['demoCode'],
+            'channel' => 'email',
+        ]);
+        self::assertFalse((bool) $verifyEmail['contactsVerified']);
+
+        $resendPhone = $this->engine->resendContactVerification($email, 'phone');
+        $verifyPhone = $this->engine->verifyOnboardingContact([
+            'challengeId' => (string) $resendPhone['challengeId'],
+            'code' => (string) $resendPhone['demoCode'],
+            'channel' => 'phone',
+        ]);
+        self::assertTrue((bool) $verifyPhone['contactsVerified']);
+
+        $login = $this->engine->login([
+            'email' => $email,
+            'password' => $password,
+            'deviceId' => 'onboarding-device',
+        ]);
+        self::assertTrue((bool) $login['requiresMfa']);
+
+        $verified = $this->engine->verifyLoginMfa([
+            'challengeId' => (string) $login['challenge']['challengeId'],
+            'code' => (string) $login['challenge']['demoCode'],
+            'deviceId' => 'onboarding-device',
+        ]);
+        self::assertArrayHasKey('tokens', $verified);
+
+        $enrollAttempt = $this->engine->enrollBiometric([
+            'email' => $email,
+            'password' => $password,
+            'deviceId' => 'onboarding-device',
+            'deviceLabel' => 'Face ID',
+        ]);
+        self::assertTrue((bool) $enrollAttempt['mfaRequired']);
+
+        $enrolled = $this->engine->enrollBiometric([
+            'email' => $email,
+            'password' => $password,
+            'deviceId' => 'onboarding-device',
+            'deviceLabel' => 'Face ID',
+            'mfaChallengeId' => (string) $enrollAttempt['challenge']['challengeId'],
+            'mfaCode' => (string) $enrollAttempt['challenge']['demoCode'],
+        ]);
+        self::assertFalse((bool) $enrolled['mfaRequired']);
+        self::assertTrue((bool) $enrolled['user']['biometricEnabled']);
+        self::assertTrue((bool) $enrolled['user']['contactsVerified']);
+
+        $biometricLogin = $this->engine->biometricLogin($email, 'onboarding-device');
+        self::assertArrayHasKey('tokens', $biometricLogin);
     }
 
     /**

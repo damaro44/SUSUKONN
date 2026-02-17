@@ -52,6 +52,8 @@ final class SeedStateFactory
                 'addressToken' => Helpers::tokenRef('admin-address'),
                 'submittedAt' => $now,
             ],
+            'emailVerifiedAt' => $now,
+            'phoneVerifiedAt' => $now,
             'createdAt' => $now,
         ];
 
@@ -94,6 +96,8 @@ final class SeedStateFactory
                 'addressToken' => Helpers::tokenRef('leader-address'),
                 'submittedAt' => $now,
             ],
+            'emailVerifiedAt' => $now,
+            'phoneVerifiedAt' => $now,
             'createdAt' => $now,
         ];
 
@@ -136,6 +140,8 @@ final class SeedStateFactory
                 'addressToken' => Helpers::tokenRef('member-address'),
                 'submittedAt' => $now,
             ],
+            'emailVerifiedAt' => $now,
+            'phoneVerifiedAt' => $now,
             'createdAt' => $now,
         ];
 
@@ -168,6 +174,8 @@ final class SeedStateFactory
                 'addressToken' => Helpers::tokenRef('pending-address'),
                 'submittedAt' => $now,
             ],
+            'emailVerifiedAt' => $now,
+            'phoneVerifiedAt' => $now,
             'createdAt' => $now,
         ];
 
@@ -432,6 +440,7 @@ final class SeedStateFactory
             ],
             'sessions' => [],
             'mfaChallenges' => [],
+            'contactVerifications' => [],
             'authControls' => [
                 'loginAttempts' => [],
             ],

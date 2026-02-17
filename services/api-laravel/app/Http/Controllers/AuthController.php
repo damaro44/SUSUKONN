@@ -21,6 +21,47 @@ final class AuthController extends ApiController
         ]), 201);
     }
 
+    public function verifyContact(Request $request): JsonResponse
+    {
+        return $this->execute(fn (): array => $this->engine->verifyOnboardingContact([
+            'challengeId' => (string) $request->input('challengeId', ''),
+            'code' => (string) $request->input('code', ''),
+            'channel' => $request->input('channel'),
+        ]));
+    }
+
+    public function resendContactVerification(Request $request): JsonResponse
+    {
+        return $this->execute(fn (): array => $this->engine->resendContactVerification(
+            (string) $request->input('email', ''),
+            (string) $request->input('channel', '')
+        ), 201);
+    }
+
+    public function enrollBiometric(Request $request): JsonResponse
+    {
+        return $this->execute(function () use ($request): JsonResponse|array {
+            $result = $this->engine->enrollBiometric([
+                'email' => (string) $request->input('email', ''),
+                'password' => (string) $request->input('password', ''),
+                'deviceId' => (string) $request->input('deviceId', ''),
+                'deviceLabel' => $request->input('deviceLabel'),
+                'mfaChallengeId' => $request->input('mfaChallengeId'),
+                'mfaCode' => $request->input('mfaCode'),
+            ]);
+            if (($result['mfaRequired'] ?? false) === true) {
+                return response()->json([
+                    'error' => [
+                        'code' => 'MFA_REQUIRED',
+                        'message' => 'MFA verification is required.',
+                    ],
+                    'data' => $result['challenge'] ?? null,
+                ], 428);
+            }
+            return $result['user'] ?? $result;
+        });
+    }
+
     public function login(Request $request): JsonResponse
     {
         return $this->execute(function () use ($request): JsonResponse|array {

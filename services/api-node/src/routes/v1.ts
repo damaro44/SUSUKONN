@@ -31,6 +31,54 @@ v1Router.post("/auth/register", (request, response) => {
   response.status(201).json({ data: user });
 });
 
+v1Router.post("/auth/verify-contact", (request, response) => {
+  const payload = z
+    .object({
+      challengeId: z.string().min(4),
+      code: z.string().length(6),
+      channel: z.enum(["email", "phone"]).optional(),
+    })
+    .parse(request.body);
+  const data = engine.verifyOnboardingContact(payload);
+  response.json({ data });
+});
+
+v1Router.post("/auth/contact-verifications/resend", (request, response) => {
+  const payload = z
+    .object({
+      email: z.string().email(),
+      channel: z.enum(["email", "phone"]),
+    })
+    .parse(request.body);
+  const data = engine.resendContactVerification(payload.email, payload.channel);
+  response.status(201).json({ data });
+});
+
+v1Router.post("/auth/biometric/enroll", (request, response) => {
+  const payload = z
+    .object({
+      email: z.string().email(),
+      password: z.string().min(8),
+      deviceId: z.string().min(4),
+      deviceLabel: z.string().min(2).optional(),
+      mfaChallengeId: z.string().optional(),
+      mfaCode: z.string().length(6).optional(),
+    })
+    .parse(request.body);
+  const result = engine.enrollBiometric(payload);
+  if (result.mfaRequired) {
+    response.status(428).json({
+      error: {
+        code: "MFA_REQUIRED",
+        message: "MFA verification is required.",
+      },
+      data: result.challenge,
+    });
+    return;
+  }
+  response.json({ data: result.user });
+});
+
 v1Router.post("/auth/login", (request, response) => {
   const payload = z
     .object({

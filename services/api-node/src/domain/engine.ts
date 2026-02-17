@@ -52,6 +52,20 @@ interface RegisterInput {
   acceptTerms: boolean;
 }
 
+interface RegisterResult extends Pick<User, "id" | "email" | "role" | "fullName"> {
+  contactVerification: {
+    email: ContactChallengeResult;
+    phone: ContactChallengeResult;
+  };
+}
+
+interface ContactChallengeResult {
+  channel: "email" | "phone";
+  challengeId: string;
+  expiresAt: string;
+  demoCode?: string;
+}
+
 interface LoginInput {
   email: string;
   password: string;
@@ -62,6 +76,21 @@ interface LoginMfaInput {
   challengeId: string;
   code: string;
   deviceId: string;
+}
+
+interface VerifyContactInput {
+  challengeId: string;
+  code: string;
+  channel?: "email" | "phone";
+}
+
+interface EnrollBiometricInput {
+  email: string;
+  password: string;
+  deviceId: string;
+  deviceLabel?: string;
+  mfaChallengeId?: string;
+  mfaCode?: string;
 }
 
 interface CreateGroupInput {
@@ -135,7 +164,7 @@ export class DomainEngine {
     this.reconcile();
   }
 
-  register(input: RegisterInput): Pick<User, "id" | "email" | "role" | "fullName"> {
+  register(input: RegisterInput): RegisterResult {
     const email = normalizeEmail(input.email);
     const phone = normalizePhone(input.phone);
     const role: UserRole = input.role === "leader" ? "leader" : "member";
@@ -188,19 +217,32 @@ export class DomainEngine {
         dob: "",
         selfieToken: "",
       },
+      emailVerifiedAt: undefined,
+      phoneVerifiedAt: undefined,
       createdAt: nowIso(),
     };
 
     this.state.users.push(user);
+    const emailVerification = this.createContactVerification(user.id, "email");
+    const phoneVerification = this.createContactVerification(user.id, "phone");
     this.notify(
       user.id,
       "Welcome to SusuKonnect",
-      "Complete KYC verification before joining groups and receiving payouts.",
+      "Verify your email and phone, then complete KYC before joining groups and receiving payouts.",
       "onboarding",
       `welcome-${user.id}`
     );
-    this.logAudit(user.id, "REGISTER_ACCOUNT", "user", user.id, {});
-    return { id: user.id, email: user.email, role: user.role, fullName: user.fullName };
+    this.logAudit(user.id, "REGISTER_ACCOUNT", "user", user.id, { requiresContactVerification: true });
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      fullName: user.fullName,
+      contactVerification: {
+        email: emailVerification,
+        phone: phoneVerification,
+      },
+    };
   }
 
   login(input: LoginInput): { requiresMfa: boolean; challenge?: MfaCheckResult; tokens?: AuthTokens; user?: AuthUserView } {
@@ -208,6 +250,7 @@ export class DomainEngine {
     const user = this.state.users.find((candidate) => candidate.email === email);
     assert(user, 401, "INVALID_CREDENTIALS", "Invalid credentials.");
     assert(user.status === "active", 403, "USER_SUSPENDED", "User account is suspended.");
+    assert(this.contactsVerified(user), 403, "CONTACT_UNVERIFIED", "Verify your email and phone before login.");
 
     const control = this.state.authControls.loginAttempts[email] ?? { count: 0 };
     if (control.lockedUntil && new Date(control.lockedUntil) > new Date()) {
@@ -252,6 +295,7 @@ export class DomainEngine {
     const email = normalizeEmail(emailRaw);
     const user = this.state.users.find((candidate) => candidate.email === email);
     assert(user, 404, "NOT_FOUND", "User not found.");
+    assert(this.contactsVerified(user), 403, "CONTACT_UNVERIFIED", "Verify your email and phone before login.");
     assert(user.biometricEnabled, 400, "BIOMETRIC_DISABLED", "Biometric login not enabled.");
     assert(
       user.knownDevices.some((device) => device.id === deviceId),
@@ -263,6 +307,59 @@ export class DomainEngine {
     const tokens = this.issueSession(user.id, deviceId);
     this.logAudit(user.id, "BIOMETRIC_LOGIN_SUCCESS", "user", user.id, { deviceId });
     return { tokens, user: this.publicUser(user.id) };
+  }
+
+  verifyOnboardingContact(input: VerifyContactInput) {
+    const challenge = this.verifyContactChallenge(input.challengeId, input.code, input.channel);
+    const user = this.requireUser(challenge.userId);
+    const verifiedAt = nowIso();
+    if (challenge.channel === "email") {
+      user.emailVerifiedAt = verifiedAt;
+    } else {
+      user.phoneVerifiedAt = verifiedAt;
+    }
+    this.logAudit(user.id, "VERIFY_CONTACT", "user", user.id, { channel: challenge.channel });
+    return {
+      userId: user.id,
+      channel: challenge.channel,
+      verifiedAt,
+      contactsVerified: this.contactsVerified(user),
+    };
+  }
+
+  resendContactVerification(emailRaw: string, channel: "email" | "phone"): ContactChallengeResult {
+    const email = normalizeEmail(emailRaw);
+    const user = this.state.users.find((candidate) => candidate.email === email);
+    assert(user, 404, "NOT_FOUND", "User not found.");
+    if (channel === "email" && user.emailVerifiedAt) {
+      throw new HttpError(409, "ALREADY_VERIFIED", "Email is already verified.");
+    }
+    if (channel === "phone" && user.phoneVerifiedAt) {
+      throw new HttpError(409, "ALREADY_VERIFIED", "Phone is already verified.");
+    }
+    const challenge = this.createContactVerification(user.id, channel);
+    this.logAudit(user.id, "RESEND_CONTACT_VERIFICATION", "user", user.id, { channel });
+    return challenge;
+  }
+
+  enrollBiometric(input: EnrollBiometricInput) {
+    const email = normalizeEmail(input.email);
+    const user = this.state.users.find((candidate) => candidate.email === email);
+    assert(user, 404, "NOT_FOUND", "User not found.");
+    assert(user.status === "active", 403, "USER_SUSPENDED", "User account is suspended.");
+    assert(this.contactsVerified(user), 403, "CONTACT_UNVERIFIED", "Verify your email and phone before enabling biometric login.");
+    const expectedHash = hashPassword(input.password, user.salt);
+    assert(expectedHash === user.passwordHash, 401, "INVALID_CREDENTIALS", "Invalid credentials.");
+
+    const mfa = this.assertMfa(user.id, "security_change", input.mfaChallengeId, input.mfaCode);
+    if (!mfa.verified) {
+      return { mfaRequired: true, challenge: mfa };
+    }
+
+    this.touchDevice(user.id, input.deviceId, input.deviceLabel?.trim() || "Biometric device");
+    user.biometricEnabled = true;
+    this.logAudit(user.id, "ENROLL_BIOMETRIC", "user", user.id, { deviceId: input.deviceId });
+    return { mfaRequired: false, user: this.publicUser(user.id) };
   }
 
   logout(userId: string, sessionToken: string): void {
@@ -1524,6 +1621,35 @@ export class DomainEngine {
     return challenge;
   }
 
+  private createContactVerification(userId: string, channel: "email" | "phone"): ContactChallengeResult {
+    const challenge = {
+      id: uid("verify"),
+      userId,
+      channel,
+      code: generateMfaCode(),
+      expiresAt: addMinutes(new Date(), env.MFA_TTL_MINUTES),
+    };
+    this.state.contactVerifications.push(challenge);
+    return {
+      channel,
+      challengeId: challenge.id,
+      expiresAt: challenge.expiresAt,
+      demoCode: env.EXPOSE_MFA_CODES ? challenge.code : undefined,
+    };
+  }
+
+  private verifyContactChallenge(challengeId: string, code: string, expectedChannel?: "email" | "phone") {
+    const challenge = this.state.contactVerifications.find((entry) => entry.id === challengeId);
+    assert(challenge, 401, "INVALID_VERIFICATION_CHALLENGE", "Contact verification challenge not found.");
+    if (expectedChannel) {
+      assert(challenge.channel === expectedChannel, 401, "INVALID_VERIFICATION_CHANNEL", "Verification channel mismatch.");
+    }
+    assert(new Date(challenge.expiresAt) > new Date(), 401, "VERIFICATION_EXPIRED", "Verification challenge expired.");
+    assert(challenge.code === code, 401, "INVALID_VERIFICATION_CODE", "Invalid verification code.");
+    this.state.contactVerifications = this.state.contactVerifications.filter((entry) => entry.id !== challengeId);
+    return challenge;
+  }
+
   private issueSession(userId: string, deviceId: string): AuthTokens {
     const token = uid("sess");
     const now = new Date();
@@ -1564,6 +1690,9 @@ export class DomainEngine {
       fullName: user.fullName,
       email: user.email,
       phone: user.phone,
+      emailVerifiedAt: user.emailVerifiedAt,
+      phoneVerifiedAt: user.phoneVerifiedAt,
+      contactsVerified: this.contactsVerified(user),
       role: user.role,
       status: user.status,
       verifiedBadge: user.verifiedBadge,
@@ -1574,6 +1703,10 @@ export class DomainEngine {
       paymentMethods: user.paymentMethods,
       knownDevices: user.knownDevices,
     };
+  }
+
+  private contactsVerified(user: User): boolean {
+    return Boolean(user.emailVerifiedAt && user.phoneVerifiedAt);
   }
 
   private requireGroup(groupId: string): Group {
@@ -1839,6 +1972,9 @@ export interface AuthUserView {
   fullName: string;
   email: string;
   phone: string;
+  emailVerifiedAt?: string;
+  phoneVerifiedAt?: string;
+  contactsVerified: boolean;
   role: UserRole;
   status: "active" | "suspended";
   verifiedBadge: boolean;
@@ -1913,6 +2049,8 @@ function seedState(): DomainState {
       addressToken: tokenRef("admin-address"),
       submittedAt: nowIso(),
     },
+    emailVerifiedAt: nowIso(),
+    phoneVerifiedAt: nowIso(),
     createdAt: nowIso(),
   };
 
@@ -1951,6 +2089,8 @@ function seedState(): DomainState {
       addressToken: tokenRef("leader-address"),
       submittedAt: nowIso(),
     },
+    emailVerifiedAt: nowIso(),
+    phoneVerifiedAt: nowIso(),
     createdAt: nowIso(),
   };
 
@@ -1989,6 +2129,8 @@ function seedState(): DomainState {
       addressToken: tokenRef("member-address"),
       submittedAt: nowIso(),
     },
+    emailVerifiedAt: nowIso(),
+    phoneVerifiedAt: nowIso(),
     createdAt: nowIso(),
   };
 
@@ -2017,6 +2159,8 @@ function seedState(): DomainState {
       addressToken: tokenRef("pending-address"),
       submittedAt: nowIso(),
     },
+    emailVerifiedAt: nowIso(),
+    phoneVerifiedAt: nowIso(),
     createdAt: nowIso(),
   };
 
@@ -2281,6 +2425,7 @@ function seedState(): DomainState {
     ],
     sessions: [],
     mfaChallenges: [],
+    contactVerifications: [],
     authControls: {
       loginAttempts: {},
     },

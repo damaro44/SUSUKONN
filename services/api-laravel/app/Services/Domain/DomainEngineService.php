@@ -22,6 +22,18 @@ final class DomainEngineService
         private readonly ?KycProviderInterface $kycProvider = null
     ) {
         $this->state = $this->repository->get();
+        if (!isset($this->state['contactVerifications']) || !is_array($this->state['contactVerifications'])) {
+            $this->state['contactVerifications'] = [];
+        }
+        foreach ($this->state['users'] as &$user) {
+            if (!array_key_exists('emailVerifiedAt', $user)) {
+                $user['emailVerifiedAt'] = null;
+            }
+            if (!array_key_exists('phoneVerifiedAt', $user)) {
+                $user['phoneVerifiedAt'] = null;
+            }
+        }
+        unset($user);
         $this->reconcile();
         $this->persist();
     }
@@ -107,11 +119,15 @@ final class DomainEngineService
                 'dob' => '',
                 'selfieToken' => '',
             ],
+            'emailVerifiedAt' => null,
+            'phoneVerifiedAt' => null,
             'createdAt' => Helpers::nowIso(),
         ];
         $this->state['users'][] = $user;
-        $this->notify($user['id'], 'Welcome to SusuKonnect', 'Complete KYC verification before joining groups and receiving payouts.', 'onboarding', 'welcome-' . $user['id']);
-        $this->logAudit($user['id'], 'REGISTER_ACCOUNT', 'user', $user['id'], []);
+        $emailVerification = $this->createContactVerification((string) $user['id'], 'email');
+        $phoneVerification = $this->createContactVerification((string) $user['id'], 'phone');
+        $this->notify($user['id'], 'Welcome to SusuKonnect', 'Verify your email and phone, then complete KYC before joining groups and receiving payouts.', 'onboarding', 'welcome-' . $user['id']);
+        $this->logAudit($user['id'], 'REGISTER_ACCOUNT', 'user', $user['id'], ['requiresContactVerification' => true]);
         $this->persist();
 
         return [
@@ -119,6 +135,10 @@ final class DomainEngineService
             'email' => $user['email'],
             'role' => $user['role'],
             'fullName' => $user['fullName'],
+            'contactVerification' => [
+                'email' => $emailVerification,
+                'phone' => $phoneVerification,
+            ],
         ];
     }
 
@@ -134,6 +154,7 @@ final class DomainEngineService
         $user = $this->findUserByEmail($email);
         Helpers::assert($user !== null, 401, 'INVALID_CREDENTIALS', 'Invalid credentials.');
         Helpers::assert($user['status'] === 'active', 403, 'USER_SUSPENDED', 'User account is suspended.');
+        Helpers::assert($this->contactsVerified($user), 403, 'CONTACT_UNVERIFIED', 'Verify your email and phone before login.');
 
         $attempts = $this->state['authControls']['loginAttempts'][$email] ?? ['count' => 0];
         if (isset($attempts['lockedUntil']) && strtotime((string) $attempts['lockedUntil']) > time()) {
@@ -202,6 +223,7 @@ final class DomainEngineService
         $email = Helpers::normalizeEmail($emailRaw);
         $user = $this->findUserByEmail($email);
         Helpers::assert($user !== null, 404, 'NOT_FOUND', 'User not found.');
+        Helpers::assert($this->contactsVerified($user), 403, 'CONTACT_UNVERIFIED', 'Verify your email and phone before login.');
         Helpers::assert((bool) $user['biometricEnabled'], 400, 'BIOMETRIC_DISABLED', 'Biometric login not enabled.');
         Helpers::assert(
             $this->firstWhere($user['knownDevices'], static fn (array $device): bool => $device['id'] === $deviceId) !== null,
@@ -218,6 +240,89 @@ final class DomainEngineService
             'tokens' => $tokens,
             'user' => $this->publicUser((string) $user['id']),
         ];
+    }
+
+    /**
+     * @param array{challengeId:string,code:string,channel?:string|null} $input
+     * @return array<string,mixed>
+     */
+    public function verifyOnboardingContact(array $input): array
+    {
+        $channel = isset($input['channel']) && $input['channel'] !== null && $input['channel'] !== ''
+            ? (string) $input['channel']
+            : null;
+        $challenge = $this->verifyContactChallenge((string) $input['challengeId'], (string) $input['code'], $channel);
+        $userId = (string) $challenge['userId'];
+        $verifiedAt = Helpers::nowIso();
+        $this->mutateUser($userId, static function (array &$mutable) use ($challenge, $verifiedAt): void {
+            if ($challenge['channel'] === 'email') {
+                $mutable['emailVerifiedAt'] = $verifiedAt;
+                return;
+            }
+            $mutable['phoneVerifiedAt'] = $verifiedAt;
+        });
+        $user = $this->requireUser($userId);
+        $this->logAudit($userId, 'VERIFY_CONTACT', 'user', $userId, ['channel' => $challenge['channel']]);
+        $this->persist();
+        return [
+            'userId' => $userId,
+            'channel' => $challenge['channel'],
+            'verifiedAt' => $verifiedAt,
+            'contactsVerified' => $this->contactsVerified($user),
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    public function resendContactVerification(string $emailRaw, string $channel): array
+    {
+        $email = Helpers::normalizeEmail($emailRaw);
+        Helpers::assert(in_array($channel, ['email', 'phone'], true), 400, 'INVALID_CHANNEL', 'Channel must be email or phone.');
+        $user = $this->findUserByEmail($email);
+        Helpers::assert($user !== null, 404, 'NOT_FOUND', 'User not found.');
+        if ($channel === 'email') {
+            Helpers::assert(($user['emailVerifiedAt'] ?? null) === null, 409, 'ALREADY_VERIFIED', 'Email is already verified.');
+        } else {
+            Helpers::assert(($user['phoneVerifiedAt'] ?? null) === null, 409, 'ALREADY_VERIFIED', 'Phone is already verified.');
+        }
+        $challenge = $this->createContactVerification((string) $user['id'], $channel);
+        $this->logAudit((string) $user['id'], 'RESEND_CONTACT_VERIFICATION', 'user', (string) $user['id'], ['channel' => $channel]);
+        $this->persist();
+        return $challenge;
+    }
+
+    /**
+     * @param array<string,mixed> $input
+     * @return array<string,mixed>
+     */
+    public function enrollBiometric(array $input): array
+    {
+        $email = Helpers::normalizeEmail((string) ($input['email'] ?? ''));
+        $password = (string) ($input['password'] ?? '');
+        $deviceId = (string) ($input['deviceId'] ?? '');
+        $deviceLabel = trim((string) ($input['deviceLabel'] ?? ''));
+        Helpers::assert($deviceId !== '', 400, 'INVALID_INPUT', 'Device id is required.');
+
+        $user = $this->findUserByEmail($email);
+        Helpers::assert($user !== null, 404, 'NOT_FOUND', 'User not found.');
+        Helpers::assert($user['status'] === 'active', 403, 'USER_SUSPENDED', 'User account is suspended.');
+        Helpers::assert($this->contactsVerified($user), 403, 'CONTACT_UNVERIFIED', 'Verify your email and phone before enabling biometric login.');
+        Helpers::assert(Helpers::hashPassword($password, (string) $user['salt']) === $user['passwordHash'], 401, 'INVALID_CREDENTIALS', 'Invalid credentials.');
+
+        $mfaResult = $this->assertMfa((string) $user['id'], 'security_change', $input['mfaChallengeId'] ?? null, $input['mfaCode'] ?? null);
+        if (!$mfaResult['verified']) {
+            $this->persist();
+            return ['mfaRequired' => true, 'challenge' => $mfaResult];
+        }
+
+        $this->touchDevice((string) $user['id'], $deviceId, $deviceLabel !== '' ? $deviceLabel : 'Biometric device');
+        $this->mutateUser((string) $user['id'], static function (array &$mutable): void {
+            $mutable['biometricEnabled'] = true;
+        });
+        $this->logAudit((string) $user['id'], 'ENROLL_BIOMETRIC', 'user', (string) $user['id'], ['deviceId' => $deviceId]);
+        $this->persist();
+        return ['mfaRequired' => false, 'user' => $this->publicUser((string) $user['id'])];
     }
 
     public function logout(string $userId, string $sessionToken): void
@@ -1841,6 +1946,99 @@ final class DomainEngineService
     /**
      * @return array<string,mixed>
      */
+    private function createContactVerification(string $userId, string $channel): array
+    {
+        Helpers::assert(in_array($channel, ['email', 'phone'], true), 400, 'INVALID_CHANNEL', 'Channel must be email or phone.');
+        $challenge = [
+            'id' => Helpers::uid('verify'),
+            'userId' => $userId,
+            'channel' => $channel,
+            'code' => Helpers::generateMfaCode(),
+            'expiresAt' => Helpers::addMinutes(Helpers::nowIso(), (int) env('MFA_TTL_MINUTES', 10)),
+        ];
+        $this->state['contactVerifications'][] = $challenge;
+        $exposeCodes = Helpers::asBool(env('EXPOSE_MFA_CODES', true), true);
+        return [
+            'channel' => $channel,
+            'challengeId' => $challenge['id'],
+            'expiresAt' => $challenge['expiresAt'],
+            'demoCode' => $exposeCodes ? $challenge['code'] : null,
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function verifyContactChallenge(string $challengeId, string $code, ?string $expectedChannel = null): array
+    {
+        $challenge = $this->firstWhere($this->state['contactVerifications'], static fn (array $entry): bool => $entry['id'] === $challengeId);
+        Helpers::assert($challenge !== null, 401, 'INVALID_VERIFICATION_CHALLENGE', 'Contact verification challenge not found.');
+        if ($expectedChannel !== null && $expectedChannel !== '') {
+            Helpers::assert($challenge['channel'] === $expectedChannel, 401, 'INVALID_VERIFICATION_CHANNEL', 'Verification channel mismatch.');
+        }
+        Helpers::assert(strtotime((string) $challenge['expiresAt']) > time(), 401, 'VERIFICATION_EXPIRED', 'Verification challenge expired.');
+        Helpers::assert((string) $challenge['code'] === $code, 401, 'INVALID_VERIFICATION_CODE', 'Invalid verification code.');
+        $this->state['contactVerifications'] = array_values(array_filter(
+            $this->state['contactVerifications'],
+            static fn (array $entry): bool => $entry['id'] !== $challengeId
+        ));
+        return $challenge;
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function createContactVerification(string $userId, string $channel): array
+    {
+        Helpers::assert(in_array($channel, ['email', 'phone'], true), 400, 'INVALID_CHANNEL', 'Channel must be email or phone.');
+        $challenge = [
+            'id' => Helpers::uid('verify'),
+            'userId' => $userId,
+            'channel' => $channel,
+            'code' => Helpers::generateMfaCode(),
+            'expiresAt' => Helpers::addMinutes(Helpers::nowIso(), (int) env('MFA_TTL_MINUTES', 10)),
+        ];
+        $this->state['contactVerifications'][] = $challenge;
+        $exposeCodes = Helpers::asBool(env('EXPOSE_MFA_CODES', true), true);
+        return [
+            'channel' => $channel,
+            'challengeId' => $challenge['id'],
+            'expiresAt' => $challenge['expiresAt'],
+            'demoCode' => $exposeCodes ? $challenge['code'] : null,
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function verifyContactChallenge(string $challengeId, string $code, ?string $expectedChannel = null): array
+    {
+        $challenge = $this->firstWhere(
+            $this->state['contactVerifications'],
+            static fn (array $entry): bool => $entry['id'] === $challengeId
+        );
+        Helpers::assert($challenge !== null, 401, 'INVALID_VERIFICATION_CHALLENGE', 'Contact verification challenge not found.');
+        if ($expectedChannel !== null && $expectedChannel !== '') {
+            Helpers::assert(
+                in_array($expectedChannel, ['email', 'phone'], true),
+                400,
+                'INVALID_CHANNEL',
+                'Channel must be email or phone.'
+            );
+            Helpers::assert((string) $challenge['channel'] === $expectedChannel, 401, 'INVALID_VERIFICATION_CHANNEL', 'Verification channel mismatch.');
+        }
+        Helpers::assert(strtotime((string) $challenge['expiresAt']) > time(), 401, 'VERIFICATION_EXPIRED', 'Verification challenge expired.');
+        Helpers::assert((string) $challenge['code'] === $code, 401, 'INVALID_VERIFICATION_CODE', 'Invalid verification code.');
+        $this->state['contactVerifications'] = array_values(array_filter(
+            $this->state['contactVerifications'],
+            static fn (array $entry): bool => $entry['id'] !== $challengeId
+        ));
+        return $challenge;
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
     private function issueSession(string $userId, string $deviceId): array
     {
         $token = Helpers::uid('sess');
@@ -2040,6 +2238,9 @@ final class DomainEngineService
             'fullName' => $user['fullName'],
             'email' => $user['email'],
             'phone' => $user['phone'],
+            'emailVerifiedAt' => $user['emailVerifiedAt'] ?? null,
+            'phoneVerifiedAt' => $user['phoneVerifiedAt'] ?? null,
+            'contactsVerified' => $this->contactsVerified($user),
             'role' => $user['role'],
             'status' => $user['status'],
             'verifiedBadge' => $user['verifiedBadge'],
@@ -2050,6 +2251,14 @@ final class DomainEngineService
             'paymentMethods' => $user['paymentMethods'],
             'knownDevices' => $user['knownDevices'],
         ];
+    }
+
+    /**
+     * @param array<string,mixed> $user
+     */
+    private function contactsVerified(array $user): bool
+    {
+        return ($user['emailVerifiedAt'] ?? null) !== null && ($user['phoneVerifiedAt'] ?? null) !== null;
     }
 
     /**

@@ -26,6 +26,9 @@ Route::prefix('v1')->group(function () {
     Route::get('/health', fn () => response()->json(['data' => ['status' => 'ok']]));
 
     Route::post('/auth/register', [AuthController::class, 'register']);
+    Route::post('/auth/verify-contact', [AuthController::class, 'verifyContact']);
+    Route::post('/auth/contact-verifications/resend', [AuthController::class, 'resendContactVerification']);
+    Route::post('/auth/biometric/enroll', [AuthController::class, 'enrollBiometric']);
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/mfa/verify', [AuthController::class, 'verifyMfa']);
     Route::post('/auth/biometric-login', [AuthController::class, 'biometricLogin']);

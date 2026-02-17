@@ -76,6 +76,8 @@ export interface User {
   paymentMethods: PaymentMethod[];
   kyc: KycProfile;
   metrics: UserMetrics;
+  emailVerifiedAt?: string;
+  phoneVerifiedAt?: string;
   createdAt: string;
   lastLoginAt?: string;
 }
@@ -233,6 +235,14 @@ export interface MfaChallenge {
   expiresAt: string;
 }
 
+export interface ContactVerificationChallenge {
+  id: string;
+  userId: string;
+  channel: "email" | "phone";
+  code: string;
+  expiresAt: string;
+}
+
 export interface Session {
   token: string;
   userId: string;
@@ -255,6 +265,7 @@ export interface DomainState {
   auditLogs: AuditLog[];
   sessions: Session[];
   mfaChallenges: MfaChallenge[];
+  contactVerifications: ContactVerificationChallenge[];
   authControls: {
     loginAttempts: Record<string, { count: number; lockedUntil?: string }>;
   };
@@ -271,6 +282,9 @@ export interface AuthUserView {
   fullName: string;
   email: string;
   phone: string;
+  emailVerifiedAt?: string;
+  phoneVerifiedAt?: string;
+  contactsVerified: boolean;
   role: UserRole;
   status: "active" | "suspended";
   verifiedBadge: boolean;
