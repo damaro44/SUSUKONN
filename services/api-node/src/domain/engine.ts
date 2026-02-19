@@ -505,6 +505,7 @@ export class DomainEngine {
       amount: group.contributionAmount,
       currency: group.currency,
     });
+    this.reconcile();
     return group;
   }
 
@@ -528,11 +529,13 @@ export class DomainEngine {
         `join-request-${group.id}-${userId}`
       );
       this.logAudit(userId, "REQUEST_JOIN_GROUP", "group", group.id, { targetUserId: userId });
+      this.reconcile();
       return group;
     }
 
     this.addMember(group, userId);
     this.logAudit(userId, "JOIN_GROUP", "group", group.id, { targetUserId: userId });
+    this.reconcile();
     return group;
   }
 
@@ -602,6 +605,7 @@ export class DomainEngine {
       );
       this.logAudit(actorId, "REJECT_JOIN_REQUEST", "group", group.id, { targetUserId });
     }
+    this.reconcile();
     return group;
   }
 
