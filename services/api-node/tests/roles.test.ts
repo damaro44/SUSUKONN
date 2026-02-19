@@ -86,6 +86,192 @@ describe("role capabilities", () => {
     expect(releasedPayout?.status).toBe("released");
   });
 
+  it("enforces contribution reminders and payout release guardrails", async () => {
+    const leaderToken = await login("leader@susukonnect.app", "Leader@2026", "leader-guardrail-device");
+    const memberToken = await login("member@susukonnect.app", "Member@2026", "member-guardrail-device");
+    const startDateSoon = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const startDatePast = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const created = await request(app)
+      .post("/v1/groups")
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        name: "Contribution Reminder Group",
+        description: "Validates automatic reminders and monthly payout controls.",
+        communityType: "General",
+        location: "New York",
+        startDate: startDateSoon,
+        contributionAmount: 90,
+        currency: "USD",
+        totalMembers: 3,
+        payoutFrequency: "monthly",
+        payoutOrderLogic: "fixed",
+        gracePeriodDays: 1,
+        requiresLeaderApproval: true,
+        rules: "Contribute monthly before due date.",
+      });
+    expect(created.status).toBe(201);
+
+    const lateGroup = await request(app)
+      .post("/v1/groups")
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        name: "Late Alert Group",
+        description: "Validates late contribution alerts to group leader.",
+        communityType: "General",
+        location: "New York",
+        startDate: startDatePast,
+        contributionAmount: 75,
+        currency: "USD",
+        totalMembers: 3,
+        payoutFrequency: "monthly",
+        payoutOrderLogic: "fixed",
+        gracePeriodDays: 1,
+        requiresLeaderApproval: true,
+        rules: "Contribute before grace period to avoid late status.",
+      });
+    expect(lateGroup.status).toBe(201);
+
+    const leaderNotifications = await request(app)
+      .get("/v1/notifications")
+      .set("Authorization", `Bearer ${leaderToken}`);
+    expect(leaderNotifications.status).toBe(200);
+    expect(
+      leaderNotifications.body.data.some((note: { title: string }) => note.title === "Contribution due reminder")
+    ).toBe(true);
+    expect(
+      leaderNotifications.body.data.some((note: { title: string }) => note.title === "Late contribution alert")
+    ).toBe(true);
+
+    const payoutBlockedPending = await request(app)
+      .post("/v1/groups/grp_fixed_001/payouts/request")
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        reason: "College tuition",
+      });
+    expect(payoutBlockedPending.status).toBe(409);
+    expect(payoutBlockedPending.body.error.code).toBe("CONTRIBUTIONS_PENDING");
+
+    const payAttempt = await request(app)
+      .post("/v1/contributions/ctr_fix_member/pay")
+      .set("Authorization", `Bearer ${memberToken}`)
+      .send({
+        methodId: "pm_member_debit",
+        enableAutoDebit: true,
+      });
+    expect(payAttempt.status).toBe(428);
+
+    const paid = await request(app)
+      .post("/v1/contributions/ctr_fix_member/pay")
+      .set("Authorization", `Bearer ${memberToken}`)
+      .send({
+        methodId: "pm_member_debit",
+        enableAutoDebit: true,
+        mfaChallengeId: payAttempt.body.data.challengeId,
+        mfaCode: payAttempt.body.data.demoCode,
+      });
+    expect(paid.status).toBe(200);
+    expect(paid.body.data.autoDebit).toBe(true);
+
+    const memberProfile = await request(app).get("/v1/auth/me").set("Authorization", `Bearer ${memberToken}`);
+    expect(memberProfile.status).toBe(200);
+    const debitMethod = memberProfile.body.data.paymentMethods.find((method: { id: string }) => method.id === "pm_member_debit");
+    expect(debitMethod?.autoDebit).toBe(true);
+
+    const graceUpdated = await request(app)
+      .patch("/v1/groups/grp_fixed_001/config")
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        gracePeriodDays: 6,
+      });
+    expect(graceUpdated.status).toBe(200);
+    expect(graceUpdated.body.data.gracePeriodDays).toBe(6);
+
+    const requested = await request(app)
+      .post("/v1/groups/grp_fixed_001/payouts/request")
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        reason: "College tuition",
+      });
+    expect(requested.status).toBe(201);
+    const payoutId = requested.body.data.id as string;
+
+    const releaseBeforeApproval = await request(app)
+      .post(`/v1/payouts/${payoutId}/release`)
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({});
+    expect(releaseBeforeApproval.status).toBe(409);
+    expect(releaseBeforeApproval.body.error.code).toBe("PAYOUT_NOT_APPROVED");
+
+    const reasonReviewed = await request(app)
+      .post(`/v1/payouts/${payoutId}/reason-review`)
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        decision: "approve",
+        note: "Reason accepted before payout approval.",
+      });
+    expect(reasonReviewed.status).toBe(200);
+
+    const approveAttempt = await request(app)
+      .post(`/v1/payouts/${payoutId}/approve`)
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({});
+    expect(approveAttempt.status).toBe(428);
+
+    const approved = await request(app)
+      .post(`/v1/payouts/${payoutId}/approve`)
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        mfaChallengeId: approveAttempt.body.data.challengeId,
+        mfaCode: approveAttempt.body.data.demoCode,
+      });
+    expect(approved.status).toBe(200);
+    expect(approved.body.data.status).toBe("approved");
+
+    const releaseBeforeRecipient = await request(app)
+      .post(`/v1/payouts/${payoutId}/release`)
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({});
+    expect(releaseBeforeRecipient.status).toBe(409);
+    expect(releaseBeforeRecipient.body.error.code).toBe("RECIPIENT_MFA_PENDING");
+
+    const confirmAttempt = await request(app)
+      .post(`/v1/payouts/${payoutId}/confirm-recipient`)
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        reason: "Medical procedure",
+      });
+    expect(confirmAttempt.status).toBe(428);
+
+    const confirmed = await request(app)
+      .post(`/v1/payouts/${payoutId}/confirm-recipient`)
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        mfaChallengeId: confirmAttempt.body.data.challengeId,
+        mfaCode: confirmAttempt.body.data.demoCode,
+        reason: "Medical procedure",
+      });
+    expect(confirmed.status).toBe(200);
+    expect(confirmed.body.data.recipientMfaConfirmed).toBe(true);
+    expect(confirmed.body.data.reason).toBe("Medical procedure");
+
+    const releaseAttempt = await request(app)
+      .post(`/v1/payouts/${payoutId}/release`)
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({});
+    expect(releaseAttempt.status).toBe(428);
+
+    const released = await request(app)
+      .post(`/v1/payouts/${payoutId}/release`)
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        mfaChallengeId: releaseAttempt.body.data.challengeId,
+        mfaCode: releaseAttempt.body.data.demoCode,
+      });
+    expect(released.status).toBe(200);
+    expect(released.body.data.status).toBe("released");
+  });
+
   it("allows leaders to manage groups, payout reasons, and chat moderation", async () => {
     const leaderToken = await login("leader@susukonnect.app", "Leader@2026", "leader-manage-device");
     const memberToken = await login("member@susukonnect.app", "Member@2026", "member-request-device");

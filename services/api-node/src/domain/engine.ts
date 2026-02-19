@@ -883,7 +883,9 @@ export class DomainEngine {
     this.notify(
       group.leaderId,
       "Payout request submitted",
-      `${recipient.fullName} requested payout in ${group.name}.`,
+      `${recipient.fullName} requested payout in ${group.name} for "${reason}"${
+        customReason ? ` (${customReason.trim()})` : ""
+      }.`,
       "payout",
       `payout-request-${payout.id}`
     );
@@ -1016,15 +1018,36 @@ export class DomainEngine {
     return { mfaRequired: false, payout };
   }
 
-  confirmPayoutRecipient(userId: string, payoutId: string, payload: { mfaChallengeId?: string; mfaCode?: string }) {
+  confirmPayoutRecipient(
+    userId: string,
+    payoutId: string,
+    payload: { mfaChallengeId?: string; mfaCode?: string; reason?: PayoutReason; customReason?: string }
+  ) {
     const payout = this.requirePayout(payoutId);
     assert(payout.recipientId === userId, 403, "FORBIDDEN", "Only recipient can confirm.");
+
     const mfa = this.assertMfa(userId, "payout_approve", payload.mfaChallengeId, payload.mfaCode);
     if (!mfa.verified) {
       return { mfaRequired: true, challenge: mfa };
     }
+
+    if (payload.reason) {
+      assert(PAYOUT_REASONS.includes(payload.reason), 400, "INVALID_REASON", "Unsupported reason.");
+      payout.reason = payload.reason;
+      if (payload.reason !== "Custom reason") {
+        payout.customReason = undefined;
+      }
+    }
+    if (typeof payload.customReason === "string" && (payload.reason === "Custom reason" || payout.reason === "Custom reason")) {
+      const trimmed = payload.customReason.trim();
+      payout.customReason = trimmed || undefined;
+    }
+
     payout.recipientMfaConfirmed = true;
-    this.logAudit(userId, "CONFIRM_PAYOUT_MFA", "payout", payout.id, {});
+    this.logAudit(userId, "CONFIRM_PAYOUT_MFA", "payout", payout.id, {
+      reason: payout.reason,
+      customReason: payout.customReason,
+    });
     return { mfaRequired: false, payout };
   }
 

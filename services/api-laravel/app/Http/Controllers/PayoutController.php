@@ -97,6 +97,8 @@ final class PayoutController extends ApiController
             $result = $this->engine->confirmPayoutRecipient((string) $auth['user']['id'], $payoutId, [
                 'mfaChallengeId' => $request->input('mfaChallengeId'),
                 'mfaCode' => $request->input('mfaCode'),
+                'reason' => $request->input('reason'),
+                'customReason' => $request->input('customReason'),
             ]);
             if (($result['mfaRequired'] ?? false) === true) {
                 return response()->json([

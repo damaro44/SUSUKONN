@@ -893,7 +893,13 @@ final class DomainEngineService
             'netAmount' => 0.0,
         ];
         $this->state['payouts'][] = $payout;
-        $this->notify((string) $group['leaderId'], 'Payout request submitted', $recipient['fullName'] . ' requested payout in ' . $group['name'] . '.', 'payout', 'payout-request-' . $payout['id']);
+        $this->notify(
+            (string) $group['leaderId'],
+            'Payout request submitted',
+            $recipient['fullName'] . ' requested payout in ' . $group['name'] . ' for "' . $reason . '"' . ($customReason !== null && trim($customReason) !== '' ? ' (' . trim($customReason) . ')' : '') . '.',
+            'payout',
+            'payout-request-' . $payout['id']
+        );
         foreach ($this->adminUsers() as $admin) {
             $this->notify((string) $admin['id'], 'Payout review required', 'Payout request in ' . $group['name'] . ' needs review.', 'compliance', 'payout-review-' . $payout['id'] . '-' . $admin['id']);
         }
@@ -1066,12 +1072,34 @@ final class DomainEngineService
             $this->persist();
             return ['mfaRequired' => true, 'challenge' => $mfaResult];
         }
+
+        $reason = isset($payload['reason']) ? trim((string) $payload['reason']) : '';
+        if ($reason !== '') {
+            Helpers::assert(in_array($reason, Constants::PAYOUT_REASONS, true), 400, 'INVALID_REASON', 'Unsupported reason.');
+            $this->mutatePayout($payoutId, static function (array &$mutable) use ($reason): void {
+                $mutable['reason'] = $reason;
+                if ($reason !== 'Custom reason') {
+                    $mutable['customReason'] = null;
+                }
+            });
+            $payout = $this->requirePayout($payoutId);
+        }
+        if (isset($payload['customReason']) && ((string) ($payload['customReason'] ?? '') !== '') && (($reason !== '' ? $reason : ($payout['reason'] ?? '')) === 'Custom reason')) {
+            $trimmedCustomReason = trim((string) $payload['customReason']);
+            $this->mutatePayout($payoutId, static function (array &$mutable) use ($trimmedCustomReason): void {
+                $mutable['customReason'] = $trimmedCustomReason !== '' ? $trimmedCustomReason : null;
+            });
+        }
         $this->mutatePayout($payoutId, static function (array &$mutable): void {
             $mutable['recipientMfaConfirmed'] = true;
         });
-        $this->logAudit($userId, 'CONFIRM_PAYOUT_MFA', 'payout', $payoutId, []);
+        $updated = $this->requirePayout($payoutId);
+        $this->logAudit($userId, 'CONFIRM_PAYOUT_MFA', 'payout', $payoutId, [
+            'reason' => $updated['reason'] ?? null,
+            'customReason' => $updated['customReason'] ?? null,
+        ]);
         $this->persist();
-        return ['mfaRequired' => false, 'payout' => $this->requirePayout($payoutId)];
+        return ['mfaRequired' => false, 'payout' => $updated];
     }
 
     /**

@@ -385,6 +385,8 @@ v1Router.post("/payouts/:payoutId/confirm-recipient", requireAuth, (request, res
     .object({
       mfaChallengeId: z.string().optional(),
       mfaCode: z.string().length(6).optional(),
+      reason: z.enum(PAYOUT_REASONS).optional(),
+      customReason: z.string().optional(),
     })
     .parse(request.body);
   const result = engine.confirmPayoutRecipient(

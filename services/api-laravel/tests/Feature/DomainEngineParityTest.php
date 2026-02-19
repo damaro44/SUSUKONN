@@ -130,6 +130,142 @@ final class DomainEngineParityTest extends TestCase
         self::assertSame(2, $fixedGroup['cycle']);
     }
 
+    public function testContributionReminderAndPayoutGuardrailsParity(): void
+    {
+        $leader = $this->completeLogin('leader@susukonnect.app', 'Leader@2026', 'leader-guardrail');
+        $member = $this->completeLogin('member@susukonnect.app', 'Member@2026', 'member-guardrail');
+        $startDateSoon = (new \DateTimeImmutable('+2 day'))->format('Y-m-d');
+        $startDatePast = (new \DateTimeImmutable('-7 day'))->format('Y-m-d');
+
+        $created = $this->engine->createGroup((string) $leader['user']['id'], [
+            'name' => 'Contribution Reminder Group',
+            'description' => 'Validates automatic reminders and monthly payout controls.',
+            'communityType' => 'General',
+            'location' => 'New York',
+            'startDate' => $startDateSoon,
+            'contributionAmount' => 90,
+            'currency' => 'USD',
+            'totalMembers' => 3,
+            'payoutFrequency' => 'monthly',
+            'payoutOrderLogic' => 'fixed',
+            'gracePeriodDays' => 1,
+            'requiresLeaderApproval' => true,
+            'rules' => 'Contribute monthly before due date.',
+        ]);
+        self::assertSame('monthly', $created['payoutFrequency']);
+
+        $lateGroup = $this->engine->createGroup((string) $leader['user']['id'], [
+            'name' => 'Late Alert Group',
+            'description' => 'Validates late contribution alerts to group leader.',
+            'communityType' => 'General',
+            'location' => 'New York',
+            'startDate' => $startDatePast,
+            'contributionAmount' => 75,
+            'currency' => 'USD',
+            'totalMembers' => 3,
+            'payoutFrequency' => 'monthly',
+            'payoutOrderLogic' => 'fixed',
+            'gracePeriodDays' => 1,
+            'requiresLeaderApproval' => true,
+            'rules' => 'Contribute before grace period to avoid late status.',
+        ]);
+        self::assertSame('monthly', $lateGroup['payoutFrequency']);
+
+        $notifications = $this->engine->userNotifications((string) $leader['user']['id']);
+        $titles = array_map(static fn (array $note): string => (string) $note['title'], $notifications);
+        self::assertContains('Contribution due reminder', $titles);
+        self::assertContains('Late contribution alert', $titles);
+
+        try {
+            $this->engine->requestPayout((string) $leader['user']['id'], 'grp_fixed_001', 'College tuition');
+            self::fail('Expected payout request to fail while contributions are pending.');
+        } catch (DomainHttpException $exception) {
+            self::assertSame('CONTRIBUTIONS_PENDING', $exception->errorCode());
+        }
+
+        $payAttempt = $this->engine->payContribution((string) $member['user']['id'], 'ctr_fix_member', [
+            'methodId' => 'pm_member_debit',
+            'enableAutoDebit' => true,
+        ]);
+        self::assertTrue((bool) $payAttempt['mfaRequired']);
+
+        $paid = $this->engine->payContribution((string) $member['user']['id'], 'ctr_fix_member', [
+            'methodId' => 'pm_member_debit',
+            'enableAutoDebit' => true,
+            'mfaChallengeId' => (string) $payAttempt['challenge']['challengeId'],
+            'mfaCode' => (string) $payAttempt['challenge']['demoCode'],
+        ]);
+        self::assertFalse((bool) $paid['mfaRequired']);
+        self::assertTrue((bool) $paid['contribution']['autoDebit']);
+
+        $memberView = $this->engine->authenticate((string) $member['tokens']['accessToken']);
+        $debitMethod = array_values(array_filter(
+            $memberView['paymentMethods'],
+            static fn (array $method): bool => $method['id'] === 'pm_member_debit'
+        ));
+        self::assertNotEmpty($debitMethod);
+        self::assertTrue((bool) $debitMethod[0]['autoDebit']);
+
+        $updatedGroup = $this->engine->updateGroupConfig((string) $leader['user']['id'], 'grp_fixed_001', [
+            'gracePeriodDays' => 6,
+        ]);
+        self::assertSame(6, (int) $updatedGroup['gracePeriodDays']);
+
+        $payout = $this->engine->requestPayout((string) $leader['user']['id'], 'grp_fixed_001', 'College tuition');
+        self::assertSame('requested', $payout['status']);
+
+        try {
+            $this->engine->releasePayout((string) $leader['user']['id'], (string) $payout['id'], []);
+            self::fail('Expected payout release to fail before approval.');
+        } catch (DomainHttpException $exception) {
+            self::assertSame('PAYOUT_NOT_APPROVED', $exception->errorCode());
+        }
+
+        $reviewed = $this->engine->reviewPayoutReason((string) $leader['user']['id'], (string) $payout['id'], [
+            'decision' => 'approve',
+            'note' => 'Reason accepted before payout approval.',
+        ]);
+        self::assertSame('approved', $reviewed['reasonReviewStatus']);
+
+        $approveAttempt = $this->engine->approvePayout((string) $leader['user']['id'], (string) $payout['id'], []);
+        self::assertTrue((bool) $approveAttempt['mfaRequired']);
+        $approved = $this->engine->approvePayout((string) $leader['user']['id'], (string) $payout['id'], [
+            'mfaChallengeId' => (string) $approveAttempt['challenge']['challengeId'],
+            'mfaCode' => (string) $approveAttempt['challenge']['demoCode'],
+        ]);
+        self::assertFalse((bool) $approved['mfaRequired']);
+        self::assertSame('approved', $approved['payout']['status']);
+
+        try {
+            $this->engine->releasePayout((string) $leader['user']['id'], (string) $payout['id'], []);
+            self::fail('Expected payout release to fail before recipient MFA confirmation.');
+        } catch (DomainHttpException $exception) {
+            self::assertSame('RECIPIENT_MFA_PENDING', $exception->errorCode());
+        }
+
+        $confirmAttempt = $this->engine->confirmPayoutRecipient((string) $leader['user']['id'], (string) $payout['id'], [
+            'reason' => 'Medical procedure',
+        ]);
+        self::assertTrue((bool) $confirmAttempt['mfaRequired']);
+        $confirmed = $this->engine->confirmPayoutRecipient((string) $leader['user']['id'], (string) $payout['id'], [
+            'mfaChallengeId' => (string) $confirmAttempt['challenge']['challengeId'],
+            'mfaCode' => (string) $confirmAttempt['challenge']['demoCode'],
+            'reason' => 'Medical procedure',
+        ]);
+        self::assertFalse((bool) $confirmed['mfaRequired']);
+        self::assertTrue((bool) $confirmed['payout']['recipientMfaConfirmed']);
+        self::assertSame('Medical procedure', $confirmed['payout']['reason']);
+
+        $releaseAttempt = $this->engine->releasePayout((string) $leader['user']['id'], (string) $payout['id'], []);
+        self::assertTrue((bool) $releaseAttempt['mfaRequired']);
+        $released = $this->engine->releasePayout((string) $leader['user']['id'], (string) $payout['id'], [
+            'mfaChallengeId' => (string) $releaseAttempt['challenge']['challengeId'],
+            'mfaCode' => (string) $releaseAttempt['challenge']['demoCode'],
+        ]);
+        self::assertFalse((bool) $released['mfaRequired']);
+        self::assertSame('released', $released['payout']['status']);
+    }
+
     public function testComplianceAndAdminLifecycleParity(): void
     {
         $admin = $this->completeLogin('admin@susukonnect.app', 'Admin@2026', 'admin-device');
