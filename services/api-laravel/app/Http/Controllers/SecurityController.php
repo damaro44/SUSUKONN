@@ -18,6 +18,7 @@ final class SecurityController extends ApiController
                 'idNumber' => (string) $request->input('idNumber', ''),
                 'dob' => (string) $request->input('dob', ''),
                 'selfieToken' => (string) $request->input('selfieToken', ''),
+                'livenessToken' => (string) $request->input('livenessToken', ''),
                 'address' => $request->input('address'),
             ]
         ), 201);
@@ -37,6 +38,7 @@ final class SecurityController extends ApiController
                 [
                     'mfaEnabled' => (bool) $request->input('mfaEnabled', true),
                     'biometricEnabled' => (bool) $request->input('biometricEnabled', false),
+                    'mfaMethod' => $request->input('mfaMethod'),
                 ],
                 $request->input('mfaChallengeId'),
                 $request->input('mfaCode')

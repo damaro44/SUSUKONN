@@ -18,6 +18,10 @@ export type PayoutReason = (typeof PAYOUT_REASONS)[number];
 
 export const ROLE_VALUES = ["member", "leader", "admin"] as const;
 export type UserRole = (typeof ROLE_VALUES)[number];
+export const GOVERNMENT_ID_TYPES = ["passport", "national_id", "drivers_license"] as const;
+export type GovernmentIdType = (typeof GOVERNMENT_ID_TYPES)[number];
+export const MFA_METHODS = ["sms", "authenticator"] as const;
+export type MfaMethod = (typeof MFA_METHODS)[number];
 
 export type KycStatus = "unverified" | "pending" | "verified" | "rejected";
 export type GroupStatus = "active" | "suspended" | "completed";
@@ -28,11 +32,15 @@ export type PaymentMethodType = "bank" | "debit" | "paypal" | "cashapp";
 
 export interface KycProfile {
   status: KycStatus;
-  idType: string;
+  idType: GovernmentIdType | "";
   idNumberToken: string;
   dob: string;
   selfieToken: string;
+  livenessToken?: string;
+  livenessVerified?: boolean;
+  nameDobVerified?: boolean;
   addressToken?: string;
+  addressVerified?: boolean;
   providerCaseId?: string;
   submittedAt?: string;
 }
@@ -71,6 +79,7 @@ export interface User {
   verifiedBadge: boolean;
   biometricEnabled: boolean;
   mfaEnabled: boolean;
+  mfaMethod: MfaMethod;
   status: "active" | "suspended";
   knownDevices: DeviceRecord[];
   paymentMethods: PaymentMethod[];
@@ -231,6 +240,7 @@ export interface MfaChallenge {
   id: string;
   userId: string;
   purpose: string;
+  method: MfaMethod;
   code: string;
   expiresAt: string;
 }
@@ -290,6 +300,7 @@ export interface AuthUserView {
   verifiedBadge: boolean;
   biometricEnabled: boolean;
   mfaEnabled: boolean;
+  mfaMethod: MfaMethod;
   kyc: KycProfile;
   metrics: UserMetrics;
   paymentMethods: PaymentMethod[];

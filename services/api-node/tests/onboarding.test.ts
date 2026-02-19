@@ -102,4 +102,106 @@ describe("high-trust onboarding and biometric entry", () => {
     expect(biometricLogin.status).toBe(200);
     expect(biometricLogin.body.data.tokens.accessToken).toBeTruthy();
   });
+
+  it("enforces KYC identity checks and supports authenticator MFA method", async () => {
+    const email = `kyc.user.${Date.now()}@susukonnect.app`;
+    const password = "Password123";
+
+    const register = await request(app).post("/v1/auth/register").send({
+      fullName: "Kyc Verified User",
+      email,
+      phone: "+15553334444",
+      password,
+      role: "member",
+      acceptTerms: true,
+    });
+    expect(register.status).toBe(201);
+
+    await request(app).post("/v1/auth/verify-contact").send({
+      challengeId: register.body.data.contactVerification.email.challengeId,
+      code: register.body.data.contactVerification.email.demoCode,
+      channel: "email",
+    });
+    await request(app).post("/v1/auth/verify-contact").send({
+      challengeId: register.body.data.contactVerification.phone.challengeId,
+      code: register.body.data.contactVerification.phone.demoCode,
+      channel: "phone",
+    });
+
+    const login = await request(app).post("/v1/auth/login").send({
+      email,
+      password,
+      deviceId: "kyc-device-1",
+    });
+    expect(login.status).toBe(428);
+    expect(login.body.data.method).toBe("sms");
+
+    const verified = await request(app).post("/v1/auth/mfa/verify").send({
+      challengeId: login.body.data.challengeId,
+      code: login.body.data.demoCode,
+      deviceId: "kyc-device-1",
+    });
+    expect(verified.status).toBe(200);
+    const token = verified.body.data.tokens.accessToken as string;
+
+    const invalidDobKyc = await request(app)
+      .post("/v1/me/kyc")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        idType: "passport",
+        idNumber: "P1234567",
+        dob: "07/11/1995",
+        selfieToken: "selfie_token",
+        livenessToken: "live_123456",
+      });
+    expect(invalidDobKyc.status).toBe(400);
+    expect(invalidDobKyc.body.error.code).toBe("INVALID_DOB");
+
+    const kyc = await request(app)
+      .post("/v1/me/kyc")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        idType: "passport",
+        idNumber: "P1234567",
+        dob: "1995-07-11",
+        selfieToken: "selfie_token",
+        livenessToken: "live_123456",
+        address: "123 Main Street, Accra",
+      });
+    expect(kyc.status).toBe(201);
+    expect(kyc.body.data.status).toBe("pending");
+    expect(kyc.body.data.checks.livenessVerified).toBe(true);
+    expect(kyc.body.data.checks.nameDobVerified).toBe(true);
+
+    const securityAttempt = await request(app)
+      .patch("/v1/me/security")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        mfaEnabled: true,
+        biometricEnabled: false,
+        mfaMethod: "authenticator",
+      });
+    expect(securityAttempt.status).toBe(428);
+
+    const securityUpdated = await request(app)
+      .patch("/v1/me/security")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        mfaEnabled: true,
+        biometricEnabled: false,
+        mfaMethod: "authenticator",
+        mfaChallengeId: securityAttempt.body.data.challengeId,
+        mfaCode: securityAttempt.body.data.demoCode,
+      });
+    expect(securityUpdated.status).toBe(200);
+    expect(securityUpdated.body.data.mfaMethod).toBe("authenticator");
+
+    const loginWithAuthenticator = await request(app).post("/v1/auth/login").send({
+      email,
+      password,
+      deviceId: "kyc-device-2",
+    });
+    expect(loginWithAuthenticator.status).toBe(428);
+    expect(loginWithAuthenticator.body.data.method).toBe("authenticator");
+  });
 });

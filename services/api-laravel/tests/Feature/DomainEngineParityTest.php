@@ -283,6 +283,93 @@ final class DomainEngineParityTest extends TestCase
         self::assertArrayHasKey('tokens', $biometricLogin);
     }
 
+    public function testKycChecksAndAuthenticatorMfaParity(): void
+    {
+        $email = 'kyc.user+' . uniqid('', true) . '@susukonnect.app';
+        $password = 'Password123';
+        $registration = $this->engine->register([
+            'fullName' => 'Kyc Verified User',
+            'email' => $email,
+            'phone' => '+15553334444',
+            'password' => $password,
+            'role' => 'member',
+            'acceptTerms' => true,
+        ]);
+
+        $this->engine->verifyOnboardingContact([
+            'challengeId' => (string) $registration['contactVerification']['email']['challengeId'],
+            'code' => (string) $registration['contactVerification']['email']['demoCode'],
+            'channel' => 'email',
+        ]);
+        $this->engine->verifyOnboardingContact([
+            'challengeId' => (string) $registration['contactVerification']['phone']['challengeId'],
+            'code' => (string) $registration['contactVerification']['phone']['demoCode'],
+            'channel' => 'phone',
+        ]);
+
+        $login = $this->engine->login([
+            'email' => $email,
+            'password' => $password,
+            'deviceId' => 'kyc-device-1',
+        ]);
+        self::assertTrue((bool) $login['requiresMfa']);
+        self::assertSame('sms', $login['challenge']['method']);
+
+        $verified = $this->engine->verifyLoginMfa([
+            'challengeId' => (string) $login['challenge']['challengeId'],
+            'code' => (string) $login['challenge']['demoCode'],
+            'deviceId' => 'kyc-device-1',
+        ]);
+
+        try {
+            $this->engine->submitKyc((string) $verified['user']['id'], [
+                'idType' => 'passport',
+                'idNumber' => 'P1234567',
+                'dob' => '07/11/1995',
+                'selfieToken' => 'selfie_token',
+                'livenessToken' => 'live_123456',
+            ]);
+            self::fail('Expected invalid DOB to fail KYC.');
+        } catch (DomainHttpException $exception) {
+            self::assertSame('INVALID_DOB', $exception->errorCode());
+        }
+
+        $kyc = $this->engine->submitKyc((string) $verified['user']['id'], [
+            'idType' => 'passport',
+            'idNumber' => 'P1234567',
+            'dob' => '1995-07-11',
+            'selfieToken' => 'selfie_token',
+            'livenessToken' => 'live_123456',
+            'address' => '123 Main Street, Accra',
+        ]);
+        self::assertSame('pending', $kyc['status']);
+        self::assertTrue((bool) $kyc['checks']['livenessVerified']);
+        self::assertTrue((bool) $kyc['checks']['nameDobVerified']);
+
+        $securityAttempt = $this->engine->updateSecurity((string) $verified['user']['id'], [
+            'mfaEnabled' => true,
+            'biometricEnabled' => false,
+            'mfaMethod' => 'authenticator',
+        ]);
+        self::assertTrue((bool) $securityAttempt['mfaRequired']);
+
+        $security = $this->engine->updateSecurity((string) $verified['user']['id'], [
+            'mfaEnabled' => true,
+            'biometricEnabled' => false,
+            'mfaMethod' => 'authenticator',
+        ], (string) $securityAttempt['challenge']['challengeId'], (string) $securityAttempt['challenge']['demoCode']);
+        self::assertFalse((bool) $security['mfaRequired']);
+        self::assertSame('authenticator', $security['user']['mfaMethod']);
+
+        $authLogin = $this->engine->login([
+            'email' => $email,
+            'password' => $password,
+            'deviceId' => 'kyc-device-2',
+        ]);
+        self::assertTrue((bool) $authLogin['requiresMfa']);
+        self::assertSame('authenticator', $authLogin['challenge']['method']);
+    }
+
     public function testAdminCanPurgeSignupAccountsParity(): void
     {
         $admin = $this->completeLogin('admin@susukonnect.app', 'Admin@2026', 'admin-purge-device');
@@ -372,6 +459,21 @@ final class FakeKycProvider implements KycProviderInterface
             'caseId' => 'fake_case_' . $payload['userId'],
             'clientSecret' => 'fake_secret',
             'mode' => 'test',
+        ];
+    }
+
+    public function verifyIdentity(array $payload): array
+    {
+        $dob = (string) ($payload['dob'] ?? '');
+        $address = trim((string) ($payload['address'] ?? ''));
+        return [
+            'provider' => 'stripe_identity',
+            'referenceId' => 'fake_verify_' . ($payload['userId'] ?? 'user'),
+            'mode' => 'test',
+            'idDocumentVerified' => strlen((string) ($payload['idNumber'] ?? '')) >= 4,
+            'livenessVerified' => strlen((string) ($payload['livenessToken'] ?? '')) >= 6,
+            'nameDobVerified' => preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob) === 1,
+            'addressVerified' => $address !== '' && strlen($address) >= 8,
         ];
     }
 }

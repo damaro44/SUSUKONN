@@ -32,6 +32,24 @@ final class DomainEngineService
             if (!array_key_exists('phoneVerifiedAt', $user)) {
                 $user['phoneVerifiedAt'] = null;
             }
+            if (!array_key_exists('mfaMethod', $user) || !in_array((string) $user['mfaMethod'], Constants::MFA_METHODS, true)) {
+                $user['mfaMethod'] = 'sms';
+            }
+            if (!isset($user['kyc']) || !is_array($user['kyc'])) {
+                $user['kyc'] = [];
+            }
+            if (!array_key_exists('idType', $user['kyc'])) {
+                $user['kyc']['idType'] = '';
+            }
+            if (!array_key_exists('livenessVerified', $user['kyc'])) {
+                $user['kyc']['livenessVerified'] = false;
+            }
+            if (!array_key_exists('nameDobVerified', $user['kyc'])) {
+                $user['kyc']['nameDobVerified'] = false;
+            }
+            if (!array_key_exists('addressVerified', $user['kyc'])) {
+                $user['kyc']['addressVerified'] = false;
+            }
         }
         unset($user);
         $this->reconcile();
@@ -104,6 +122,7 @@ final class DomainEngineService
             'verifiedBadge' => false,
             'biometricEnabled' => false,
             'mfaEnabled' => true,
+            'mfaMethod' => 'sms',
             'status' => 'active',
             'knownDevices' => [],
             'paymentMethods' => [],
@@ -118,6 +137,9 @@ final class DomainEngineService
                 'idNumberToken' => '',
                 'dob' => '',
                 'selfieToken' => '',
+                'livenessVerified' => false,
+                'nameDobVerified' => false,
+                'addressVerified' => false,
             ],
             'emailVerifiedAt' => null,
             'phoneVerifiedAt' => null,
@@ -1250,39 +1272,76 @@ final class DomainEngineService
     public function submitKyc(string $userId, array $input): array
     {
         $user = $this->requireUser($userId);
+        $idType = trim((string) ($input['idType'] ?? ''));
+        $idNumber = trim((string) ($input['idNumber'] ?? ''));
+        $dob = trim((string) ($input['dob'] ?? ''));
+        $selfieToken = trim((string) ($input['selfieToken'] ?? ''));
+        $livenessToken = trim((string) ($input['livenessToken'] ?? ''));
+        $address = trim((string) ($input['address'] ?? ''));
+
         Helpers::assert(
-            trim((string) ($input['idType'] ?? '')) !== '' &&
-            trim((string) ($input['idNumber'] ?? '')) !== '' &&
-            trim((string) ($input['dob'] ?? '')) !== '' &&
-            trim((string) ($input['selfieToken'] ?? '')) !== '',
+            $idType !== '' &&
+            $idNumber !== '' &&
+            $dob !== '' &&
+            $selfieToken !== '' &&
+            $livenessToken !== '',
             400,
             'INVALID_INPUT',
             'Missing KYC data.'
         );
+        Helpers::assert(in_array($idType, Constants::GOVERNMENT_ID_TYPES, true), 400, 'INVALID_ID_TYPE', 'Government-issued ID must be passport, national_id, or drivers_license.');
+        Helpers::assert($this->isIsoDate($dob), 400, 'INVALID_DOB', 'Date of birth must be in YYYY-MM-DD format.');
 
         $kycCase = $this->kycProvider()->createCase([
             'userId' => $userId,
             'fullName' => (string) $user['fullName'],
             'email' => (string) $user['email'],
         ]);
+        $verification = $this->kycProvider()->verifyIdentity([
+            'userId' => $userId,
+            'fullName' => (string) $user['fullName'],
+            'dob' => $dob,
+            'idType' => $idType,
+            'idNumber' => $idNumber,
+            'selfieToken' => $selfieToken,
+            'livenessToken' => $livenessToken,
+            'address' => $address !== '' ? $address : null,
+        ]);
+        Helpers::assert((bool) $verification['idDocumentVerified'], 422, 'KYC_ID_REJECTED', 'Government ID verification failed.');
+        Helpers::assert((bool) $verification['livenessVerified'], 422, 'KYC_LIVENESS_FAILED', 'Live selfie verification failed.');
+        Helpers::assert((bool) $verification['nameDobVerified'], 422, 'KYC_NAME_DOB_MISMATCH', 'Name and DOB cross-verification failed.');
 
-        $this->mutateUser($userId, static function (array &$mutable) use ($input, $kycCase): void {
+        $this->mutateUser($userId, static function (array &$mutable) use ($idType, $idNumber, $dob, $selfieToken, $livenessToken, $address, $kycCase, $verification): void {
             $mutable['kyc'] = [
                 'status' => 'pending',
-                'idType' => trim((string) $input['idType']),
-                'idNumberToken' => Helpers::tokenRef('id:' . trim((string) $input['idNumber'])),
-                'dob' => trim((string) $input['dob']),
-                'selfieToken' => Helpers::tokenRef('selfie:' . trim((string) $input['selfieToken'])),
-                'addressToken' => trim((string) ($input['address'] ?? '')) !== '' ? Helpers::tokenRef('address:' . trim((string) $input['address'])) : null,
+                'idType' => $idType,
+                'idNumberToken' => Helpers::tokenRef('id:' . $idNumber),
+                'dob' => $dob,
+                'selfieToken' => Helpers::tokenRef('selfie:' . $selfieToken),
+                'livenessToken' => Helpers::tokenRef('liveness:' . $livenessToken),
+                'livenessVerified' => (bool) $verification['livenessVerified'],
+                'nameDobVerified' => (bool) $verification['nameDobVerified'],
+                'addressToken' => $address !== '' ? Helpers::tokenRef('address:' . $address) : null,
+                'addressVerified' => (bool) $verification['addressVerified'],
                 'providerCaseId' => $kycCase['caseId'],
                 'submittedAt' => Helpers::nowIso(),
             ];
         });
 
+        if ($address === '') {
+            $this->notify($userId, 'Address verification recommended', 'Address verification is optional, but recommended before payout release.', 'compliance', 'kyc-address-recommendation-' . $userId);
+        }
         foreach ($this->adminUsers() as $admin) {
             $this->notify((string) $admin['id'], 'KYC review required', $user['fullName'] . ' submitted KYC documents.', 'compliance', 'kyc-review-' . $userId . '-' . $admin['id']);
         }
-        $this->logAudit($userId, 'SUBMIT_KYC', 'user', $userId, ['providerCaseId' => $kycCase['caseId']]);
+        $this->logAudit($userId, 'SUBMIT_KYC', 'user', $userId, [
+            'providerCaseId' => $kycCase['caseId'],
+            'verificationReference' => $verification['referenceId'],
+            'idDocumentVerified' => (bool) $verification['idDocumentVerified'],
+            'livenessVerified' => (bool) $verification['livenessVerified'],
+            'nameDobVerified' => (bool) $verification['nameDobVerified'],
+            'addressVerified' => (bool) $verification['addressVerified'],
+        ]);
         $this->reconcile();
         $this->persist();
         return [
@@ -1290,6 +1349,12 @@ final class DomainEngineService
             'providerCaseId' => $kycCase['caseId'],
             'providerClientSecret' => $kycCase['clientSecret'],
             'mode' => $kycCase['mode'],
+            'checks' => [
+                'idDocumentVerified' => (bool) $verification['idDocumentVerified'],
+                'livenessVerified' => (bool) $verification['livenessVerified'],
+                'nameDobVerified' => (bool) $verification['nameDobVerified'],
+                'addressVerified' => (bool) $verification['addressVerified'],
+            ],
         ];
     }
 
@@ -1320,13 +1385,20 @@ final class DomainEngineService
 
         $mfaEnabled = (bool) ($input['mfaEnabled'] ?? false);
         $biometricEnabled = (bool) ($input['biometricEnabled'] ?? false);
-        $this->mutateUser($userId, static function (array &$mutable) use ($mfaEnabled, $biometricEnabled): void {
+        $user = $this->requireUser($userId);
+        $requestedMfaMethod = isset($input['mfaMethod']) && $input['mfaMethod'] !== null
+            ? trim((string) $input['mfaMethod'])
+            : (string) ($user['mfaMethod'] ?? 'sms');
+        Helpers::assert(in_array($requestedMfaMethod, Constants::MFA_METHODS, true), 400, 'INVALID_MFA_METHOD', 'MFA method must be sms or authenticator.');
+        $this->mutateUser($userId, static function (array &$mutable) use ($mfaEnabled, $biometricEnabled, $requestedMfaMethod): void {
             $mutable['mfaEnabled'] = $mfaEnabled;
             $mutable['biometricEnabled'] = $biometricEnabled;
+            $mutable['mfaMethod'] = $requestedMfaMethod;
         });
         $this->logAudit($userId, 'UPDATE_SECURITY_SETTINGS', 'user', $userId, [
             'mfaEnabled' => $mfaEnabled,
             'biometricEnabled' => $biometricEnabled,
+            'mfaMethod' => $requestedMfaMethod,
         ]);
         $this->persist();
 
@@ -2035,10 +2107,15 @@ final class DomainEngineService
      */
     private function createMfaChallenge(string $userId, string $purpose): array
     {
+        $user = $this->requireUser($userId);
+        $method = in_array((string) ($user['mfaMethod'] ?? ''), Constants::MFA_METHODS, true)
+            ? (string) $user['mfaMethod']
+            : 'sms';
         $challenge = [
             'id' => Helpers::uid('mfa'),
             'userId' => $userId,
             'purpose' => $purpose,
+            'method' => $method,
             'code' => Helpers::generateMfaCode(),
             'expiresAt' => Helpers::addMinutes(Helpers::nowIso(), (int) env('MFA_TTL_MINUTES', 10)),
         ];
@@ -2049,6 +2126,8 @@ final class DomainEngineService
             'challengeId' => $challenge['id'],
             'expiresAt' => $challenge['expiresAt'],
             'demoCode' => $exposeCodes ? $challenge['code'] : null,
+            'method' => $method,
+            'destinationHint' => $method === 'authenticator' ? 'Authenticator app code' : 'SMS code sent to phone',
         ];
     }
 
@@ -2064,48 +2143,6 @@ final class DomainEngineService
         Helpers::assert((string) $challenge['code'] === $code, 401, 'INVALID_MFA_CODE', 'Invalid MFA code.');
         $this->state['mfaChallenges'] = array_values(array_filter(
             $this->state['mfaChallenges'],
-            static fn (array $entry): bool => $entry['id'] !== $challengeId
-        ));
-        return $challenge;
-    }
-
-    /**
-     * @return array<string,mixed>
-     */
-    private function createContactVerification(string $userId, string $channel): array
-    {
-        Helpers::assert(in_array($channel, ['email', 'phone'], true), 400, 'INVALID_CHANNEL', 'Channel must be email or phone.');
-        $challenge = [
-            'id' => Helpers::uid('verify'),
-            'userId' => $userId,
-            'channel' => $channel,
-            'code' => Helpers::generateMfaCode(),
-            'expiresAt' => Helpers::addMinutes(Helpers::nowIso(), (int) env('MFA_TTL_MINUTES', 10)),
-        ];
-        $this->state['contactVerifications'][] = $challenge;
-        $exposeCodes = Helpers::asBool(env('EXPOSE_MFA_CODES', true), true);
-        return [
-            'channel' => $channel,
-            'challengeId' => $challenge['id'],
-            'expiresAt' => $challenge['expiresAt'],
-            'demoCode' => $exposeCodes ? $challenge['code'] : null,
-        ];
-    }
-
-    /**
-     * @return array<string,mixed>
-     */
-    private function verifyContactChallenge(string $challengeId, string $code, ?string $expectedChannel = null): array
-    {
-        $challenge = $this->firstWhere($this->state['contactVerifications'], static fn (array $entry): bool => $entry['id'] === $challengeId);
-        Helpers::assert($challenge !== null, 401, 'INVALID_VERIFICATION_CHALLENGE', 'Contact verification challenge not found.');
-        if ($expectedChannel !== null && $expectedChannel !== '') {
-            Helpers::assert($challenge['channel'] === $expectedChannel, 401, 'INVALID_VERIFICATION_CHANNEL', 'Verification channel mismatch.');
-        }
-        Helpers::assert(strtotime((string) $challenge['expiresAt']) > time(), 401, 'VERIFICATION_EXPIRED', 'Verification challenge expired.');
-        Helpers::assert((string) $challenge['code'] === $code, 401, 'INVALID_VERIFICATION_CODE', 'Invalid verification code.');
-        $this->state['contactVerifications'] = array_values(array_filter(
-            $this->state['contactVerifications'],
             static fn (array $entry): bool => $entry['id'] !== $challengeId
         ));
         return $challenge;
@@ -2372,6 +2409,7 @@ final class DomainEngineService
             'verifiedBadge' => $user['verifiedBadge'],
             'biometricEnabled' => $user['biometricEnabled'],
             'mfaEnabled' => $user['mfaEnabled'],
+            'mfaMethod' => $user['mfaMethod'] ?? 'sms',
             'kyc' => $user['kyc'],
             'metrics' => $user['metrics'],
             'paymentMethods' => $user['paymentMethods'],
@@ -2385,6 +2423,14 @@ final class DomainEngineService
     private function contactsVerified(array $user): bool
     {
         return ($user['emailVerifiedAt'] ?? null) !== null && ($user['phoneVerifiedAt'] ?? null) !== null;
+    }
+
+    private function isIsoDate(string $value): bool
+    {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', trim($value))) {
+            return false;
+        }
+        return strtotime($value) !== false;
     }
 
     /**

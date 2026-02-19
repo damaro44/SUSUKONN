@@ -11,6 +11,8 @@ final class Constants
 
     public const ROLES = ['member', 'leader', 'admin'];
     public const CURRENCIES = ['USD', 'GHS', 'NGN', 'XOF', 'EUR', 'GBP', 'CFA'];
+    public const GOVERNMENT_ID_TYPES = ['passport', 'national_id', 'drivers_license'];
+    public const MFA_METHODS = ['sms', 'authenticator'];
     public const PAYOUT_REASONS = [
         'College tuition',
         'Wedding',

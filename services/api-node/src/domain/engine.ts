@@ -1,11 +1,15 @@
 import {
   CURRENCIES,
   DomainState,
+  GOVERNMENT_ID_TYPES,
   Group,
+  MfaMethod,
+  MFA_METHODS,
   Notification,
   PAYOUT_REASONS,
   PayoutReason,
   PaymentMethodType,
+  GovernmentIdType,
   User,
   UserRole,
 } from "@susukonnect/shared";
@@ -43,6 +47,8 @@ interface MfaCheckResult {
   challengeId?: string;
   expiresAt?: string;
   demoCode?: string;
+  method?: MfaMethod;
+  destinationHint?: string;
 }
 
 interface RegisterInput {
@@ -120,16 +126,18 @@ interface UpdateGroupConfigInput {
 }
 
 interface KycSubmitInput {
-  idType: string;
+  idType: GovernmentIdType;
   idNumber: string;
   dob: string;
   selfieToken: string;
+  livenessToken: string;
   address?: string;
 }
 
 interface SecurityUpdateInput {
   mfaEnabled: boolean;
   biometricEnabled: boolean;
+  mfaMethod?: MfaMethod;
 }
 
 interface AddPaymentMethodInput {
@@ -204,6 +212,7 @@ export class DomainEngine {
       verifiedBadge: false,
       biometricEnabled: false,
       mfaEnabled: true,
+      mfaMethod: "sms",
       status: "active",
       knownDevices: [],
       paymentMethods: [],
@@ -218,6 +227,9 @@ export class DomainEngine {
         idNumberToken: "",
         dob: "",
         selfieToken: "",
+        livenessVerified: false,
+        nameDobVerified: false,
+        addressVerified: false,
       },
       emailVerifiedAt: undefined,
       phoneVerifiedAt: undefined,
@@ -1199,13 +1211,38 @@ export class DomainEngine {
 
   async submitKyc(userId: string, input: KycSubmitInput) {
     const user = this.requireUser(userId);
-    assert(input.idType && input.idNumber && input.selfieToken && input.dob, 400, "INVALID_INPUT", "Missing KYC data.");
+    assert(
+      input.idType && input.idNumber && input.selfieToken && input.livenessToken && input.dob,
+      400,
+      "INVALID_INPUT",
+      "Missing KYC data."
+    );
+    assert(
+      GOVERNMENT_ID_TYPES.includes(input.idType),
+      400,
+      "INVALID_ID_TYPE",
+      "Government-issued ID must be passport, national_id, or drivers_license."
+    );
+    assert(isIsoDate(input.dob), 400, "INVALID_DOB", "Date of birth must be in YYYY-MM-DD format.");
 
     const kycCase = await this.kycProvider.createCase({
       userId,
       fullName: user.fullName,
       email: user.email,
     });
+    const verification = await this.kycProvider.verifyIdentity({
+      userId,
+      fullName: user.fullName,
+      dob: input.dob,
+      idType: input.idType,
+      idNumber: input.idNumber,
+      selfieToken: input.selfieToken,
+      livenessToken: input.livenessToken,
+      address: input.address,
+    });
+    assert(verification.idDocumentVerified, 422, "KYC_ID_REJECTED", "Government ID verification failed.");
+    assert(verification.livenessVerified, 422, "KYC_LIVENESS_FAILED", "Live selfie verification failed.");
+    assert(verification.nameDobVerified, 422, "KYC_NAME_DOB_MISMATCH", "Name and DOB cross-verification failed.");
 
     user.kyc = {
       status: "pending",
@@ -1213,10 +1250,24 @@ export class DomainEngine {
       idNumberToken: tokenRef(`id:${input.idNumber}`),
       dob: input.dob,
       selfieToken: tokenRef(`selfie:${input.selfieToken}`),
+      livenessToken: tokenRef(`liveness:${input.livenessToken}`),
+      livenessVerified: verification.livenessVerified,
+      nameDobVerified: verification.nameDobVerified,
       addressToken: input.address ? tokenRef(`address:${input.address}`) : undefined,
+      addressVerified: verification.addressVerified,
       providerCaseId: kycCase.caseId,
       submittedAt: nowIso(),
     };
+
+    if (!input.address) {
+      this.notify(
+        user.id,
+        "Address verification recommended",
+        "Address verification is optional, but recommended before payout release.",
+        "compliance",
+        `kyc-address-recommendation-${user.id}`
+      );
+    }
 
     this.adminUsers().forEach((admin) => {
       this.notify(
@@ -1227,12 +1278,25 @@ export class DomainEngine {
         `kyc-review-${user.id}-${admin.id}`
       );
     });
-    this.logAudit(userId, "SUBMIT_KYC", "user", userId, { providerCaseId: kycCase.caseId });
+    this.logAudit(userId, "SUBMIT_KYC", "user", userId, {
+      providerCaseId: kycCase.caseId,
+      verificationReference: verification.referenceId,
+      idDocumentVerified: verification.idDocumentVerified,
+      livenessVerified: verification.livenessVerified,
+      nameDobVerified: verification.nameDobVerified,
+      addressVerified: verification.addressVerified,
+    });
     return {
       status: user.kyc.status,
       providerCaseId: kycCase.caseId,
       providerClientSecret: kycCase.clientSecret,
       mode: kycCase.mode,
+      checks: {
+        idDocumentVerified: verification.idDocumentVerified,
+        livenessVerified: verification.livenessVerified,
+        nameDobVerified: verification.nameDobVerified,
+        addressVerified: verification.addressVerified,
+      },
     };
   }
 
@@ -1252,11 +1316,15 @@ export class DomainEngine {
       return { mfaRequired: true, challenge: mfa };
     }
     const user = this.requireUser(userId);
+    const mfaMethod = input.mfaMethod ?? user.mfaMethod;
+    assert(MFA_METHODS.includes(mfaMethod), 400, "INVALID_MFA_METHOD", "MFA method must be sms or authenticator.");
     user.mfaEnabled = Boolean(input.mfaEnabled);
     user.biometricEnabled = Boolean(input.biometricEnabled);
+    user.mfaMethod = mfaMethod;
     this.logAudit(userId, "UPDATE_SECURITY_SETTINGS", "user", userId, {
       mfaEnabled: input.mfaEnabled,
       biometricEnabled: input.biometricEnabled,
+      mfaMethod,
     });
     return { mfaRequired: false, user: this.publicUser(userId) };
   }
@@ -1633,10 +1701,13 @@ export class DomainEngine {
   }
 
   private createMfaChallenge(userId: string, purpose: string): MfaCheckResult {
+    const user = this.requireUser(userId);
+    const method = user.mfaMethod ?? "sms";
     const challenge = {
       id: uid("mfa"),
       userId,
       purpose,
+      method,
       code: generateMfaCode(),
       expiresAt: addMinutes(new Date(), env.MFA_TTL_MINUTES),
     };
@@ -1646,6 +1717,8 @@ export class DomainEngine {
       challengeId: challenge.id,
       expiresAt: challenge.expiresAt,
       demoCode: env.EXPOSE_MFA_CODES ? challenge.code : undefined,
+      method,
+      destinationHint: method === "authenticator" ? "Authenticator app code" : "SMS code sent to phone",
     };
   }
 
@@ -1736,6 +1809,7 @@ export class DomainEngine {
       verifiedBadge: user.verifiedBadge,
       biometricEnabled: user.biometricEnabled,
       mfaEnabled: user.mfaEnabled,
+      mfaMethod: user.mfaMethod,
       kyc: user.kyc,
       metrics: user.metrics,
       paymentMethods: user.paymentMethods,
@@ -2078,6 +2152,7 @@ export interface AuthUserView {
   verifiedBadge: boolean;
   biometricEnabled: boolean;
   mfaEnabled: boolean;
+  mfaMethod: MfaMethod;
   kyc: User["kyc"];
   metrics: User["metrics"];
   paymentMethods: User["paymentMethods"];
@@ -2108,6 +2183,14 @@ function roundTwo(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+function isIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    return false;
+  }
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime());
+}
+
 function escapeCsv(value: string): string {
   return value.replaceAll('"', '""');
 }
@@ -2134,17 +2217,22 @@ function seedState(): DomainState {
     verifiedBadge: true,
     biometricEnabled: false,
     mfaEnabled: true,
+    mfaMethod: "sms",
     status: "active",
     knownDevices: [],
     paymentMethods: [],
     metrics: { paidContributions: 0, completedGroups: 0, internalTrustScore: 82 },
     kyc: {
       status: "verified",
-      idType: "Passport",
+      idType: "passport",
       idNumberToken: tokenRef("admin-id"),
       dob: "1990-01-01",
       selfieToken: tokenRef("admin-selfie"),
+      livenessToken: tokenRef("admin-liveness"),
+      livenessVerified: true,
+      nameDobVerified: true,
       addressToken: tokenRef("admin-address"),
+      addressVerified: true,
       submittedAt: nowIso(),
     },
     emailVerifiedAt: nowIso(),
@@ -2164,6 +2252,7 @@ function seedState(): DomainState {
     verifiedBadge: true,
     biometricEnabled: true,
     mfaEnabled: true,
+    mfaMethod: "authenticator",
     status: "active",
     knownDevices: [],
     paymentMethods: [
@@ -2180,11 +2269,15 @@ function seedState(): DomainState {
     metrics: { paidContributions: 4, completedGroups: 1, internalTrustScore: 88 },
     kyc: {
       status: "verified",
-      idType: "Driver's License",
+      idType: "drivers_license",
       idNumberToken: tokenRef("leader-id"),
       dob: "1993-03-20",
       selfieToken: tokenRef("leader-selfie"),
+      livenessToken: tokenRef("leader-liveness"),
+      livenessVerified: true,
+      nameDobVerified: true,
       addressToken: tokenRef("leader-address"),
+      addressVerified: true,
       submittedAt: nowIso(),
     },
     emailVerifiedAt: nowIso(),
@@ -2204,6 +2297,7 @@ function seedState(): DomainState {
     verifiedBadge: true,
     biometricEnabled: false,
     mfaEnabled: true,
+    mfaMethod: "sms",
     status: "active",
     knownDevices: [],
     paymentMethods: [
@@ -2220,11 +2314,15 @@ function seedState(): DomainState {
     metrics: { paidContributions: 3, completedGroups: 1, internalTrustScore: 79 },
     kyc: {
       status: "verified",
-      idType: "Passport",
+      idType: "passport",
       idNumberToken: tokenRef("member-id"),
       dob: "1995-07-11",
       selfieToken: tokenRef("member-selfie"),
+      livenessToken: tokenRef("member-liveness"),
+      livenessVerified: true,
+      nameDobVerified: true,
       addressToken: tokenRef("member-address"),
+      addressVerified: true,
       submittedAt: nowIso(),
     },
     emailVerifiedAt: nowIso(),
@@ -2244,17 +2342,22 @@ function seedState(): DomainState {
     verifiedBadge: false,
     biometricEnabled: false,
     mfaEnabled: true,
+    mfaMethod: "sms",
     status: "active",
     knownDevices: [],
     paymentMethods: [],
     metrics: { paidContributions: 0, completedGroups: 0, internalTrustScore: 52 },
     kyc: {
       status: "pending",
-      idType: "National ID",
+      idType: "national_id",
       idNumberToken: tokenRef("pending-id"),
       dob: "1999-10-10",
       selfieToken: tokenRef("pending-selfie"),
+      livenessToken: tokenRef("pending-liveness"),
+      livenessVerified: true,
+      nameDobVerified: true,
       addressToken: tokenRef("pending-address"),
+      addressVerified: true,
       submittedAt: nowIso(),
     },
     emailVerifiedAt: nowIso(),

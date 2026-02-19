@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { CURRENCIES, PAYOUT_REASONS } from "@susukonnect/shared";
+import { CURRENCIES, GOVERNMENT_ID_TYPES, MFA_METHODS, PAYOUT_REASONS } from "@susukonnect/shared";
 import { engine } from "../domain/index.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
@@ -456,10 +456,11 @@ v1Router.post("/notifications/read-all", requireAuth, (request, response) => {
 v1Router.post("/me/kyc", requireAuth, async (request, response) => {
   const payload = z
     .object({
-      idType: z.string().min(2),
+      idType: z.enum(GOVERNMENT_ID_TYPES),
       idNumber: z.string().min(2),
       dob: z.string().min(8),
       selfieToken: z.string().min(2),
+      livenessToken: z.string().min(6),
       address: z.string().optional(),
     })
     .parse(request.body);
@@ -477,6 +478,7 @@ v1Router.patch("/me/security", requireAuth, (request, response) => {
     .object({
       mfaEnabled: z.boolean(),
       biometricEnabled: z.boolean(),
+      mfaMethod: z.enum(MFA_METHODS).optional(),
       mfaChallengeId: z.string().optional(),
       mfaCode: z.string().length(6).optional(),
     })
@@ -486,6 +488,7 @@ v1Router.patch("/me/security", requireAuth, (request, response) => {
     {
       mfaEnabled: payload.mfaEnabled,
       biometricEnabled: payload.biometricEnabled,
+      mfaMethod: payload.mfaMethod,
     },
     payload.mfaChallengeId,
     payload.mfaCode
