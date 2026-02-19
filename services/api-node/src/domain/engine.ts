@@ -110,6 +110,7 @@ interface CreateGroupInput {
   contributionAmount: number;
   currency: string;
   totalMembers: number;
+  payoutFrequency?: string;
   payoutOrderLogic: "fixed" | "voting" | "priority";
   gracePeriodDays: number;
   requiresLeaderApproval: boolean;
@@ -420,10 +421,12 @@ export class DomainEngine {
   }
 
   listGroups(userId: string, filters: Record<string, string | undefined>): Group[] {
+    void userId;
     const query = (filters.query ?? "").toLowerCase();
     const community = (filters.community ?? "").toLowerCase();
     const location = (filters.location ?? "").toLowerCase();
     const maxContribution = Number(filters.maxContribution ?? 0);
+    const contributionAmount = Number(filters.contributionAmount ?? 0);
     const startDate = filters.startDate ? new Date(filters.startDate) : null;
 
     return this.state.groups.filter((group) => {
@@ -439,6 +442,9 @@ export class DomainEngine {
       if (maxContribution && group.contributionAmount > maxContribution) {
         return false;
       }
+      if (contributionAmount && roundTwo(group.contributionAmount) !== roundTwo(contributionAmount)) {
+        return false;
+      }
       if (startDate && new Date(group.startDate) < startDate) {
         return false;
       }
@@ -450,15 +456,26 @@ export class DomainEngine {
     const actor = this.requireUser(userId);
     assert(actor.kyc.status === "verified", 403, "KYC_REQUIRED", "KYC verification is required.");
     assert(input.totalMembers >= 2, 400, "INVALID_GROUP_SIZE", "Group requires at least 2 members.");
+    assert(
+      !input.payoutFrequency || input.payoutFrequency === "monthly",
+      400,
+      "INVALID_PAYOUT_FREQUENCY",
+      "Only monthly payout frequency is supported."
+    );
     assert(CURRENCIES.includes(input.currency as never), 400, "INVALID_CURRENCY", "Unsupported currency.");
 
     if (actor.role === "member") {
       actor.role = "leader";
     }
 
+    let inviteCode = generateInviteCode();
+    while (this.state.groups.some((entry) => entry.inviteCode === inviteCode)) {
+      inviteCode = generateInviteCode();
+    }
+
     const group: Group = {
       id: uid("grp"),
-      inviteCode: uid("join"),
+      inviteCode,
       name: input.name.trim(),
       description: input.description.trim(),
       communityType: input.communityType.trim(),
@@ -517,6 +534,45 @@ export class DomainEngine {
     this.addMember(group, userId);
     this.logAudit(userId, "JOIN_GROUP", "group", group.id, { targetUserId: userId });
     return group;
+  }
+
+  joinGroupByInvite(userId: string, inviteCodeRaw: string): Group {
+    const inviteCode = normalizeInviteCode(inviteCodeRaw);
+    assert(inviteCode.length >= 6, 400, "INVALID_INVITE_CODE", "Invite code is invalid.");
+    const group = this.state.groups.find((entry) => normalizeInviteCode(entry.inviteCode) === inviteCode);
+    assert(group, 404, "INVITE_NOT_FOUND", "Invite link is invalid or expired.");
+    return this.joinGroup(userId, group.id);
+  }
+
+  groupInviteLink(actorId: string, groupId: string) {
+    const actor = this.requireUser(actorId);
+    const group = this.requireGroup(groupId);
+    this.assertGroupManager(actor, group);
+    return {
+      groupId: group.id,
+      inviteCode: group.inviteCode,
+      inviteLink: `https://susukonnect.app/join/${group.inviteCode}`,
+    };
+  }
+
+  groupTrustIndicators(actorId: string, groupId: string) {
+    const actor = this.requireUser(actorId);
+    const group = this.requireGroup(groupId);
+    const isManager = actor.role === "admin" || actor.id === group.leaderId;
+    const isMember = group.memberIds.includes(actorId);
+    assert(isManager || isMember, 403, "FORBIDDEN", "Group membership is required.");
+    return group.memberIds.map((memberId) => {
+      const user = this.requireUser(memberId);
+      const canViewInternalScore = actor.role === "admin" || actor.id === memberId;
+      return {
+        userId: user.id,
+        fullName: user.fullName,
+        verifiedBadge: user.verifiedBadge,
+        contributionHistory: user.metrics.paidContributions,
+        completedGroupHistory: user.metrics.completedGroups,
+        ...(canViewInternalScore ? { internalTrustScore: user.metrics.internalTrustScore } : {}),
+      };
+    });
   }
 
   reviewJoinRequest(actorId: string, groupId: string, targetUserId: string, decision: "approve" | "reject"): Group {
@@ -2165,6 +2221,14 @@ function normalizeEmail(value: string): string {
 
 function normalizePhone(value: string): string {
   return value.replace(/[^\d+]/g, "").trim();
+}
+
+function normalizeInviteCode(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+function generateInviteCode(): string {
+  return uid("join").replace(/[^A-Za-z0-9]/g, "").slice(-10).toUpperCase();
 }
 
 function formatMoney(amount: number, currency: string): string {

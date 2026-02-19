@@ -161,6 +161,111 @@ describe("role capabilities", () => {
     expect(deleted.body.data.deleted).toBe(true);
   });
 
+  it("supports invite-link joins, group search filters, and trust indicator visibility", async () => {
+    const leaderToken = await login("leader@susukonnect.app", "Leader@2026", "leader-invite-device");
+    const adminToken = await login("admin@susukonnect.app", "Admin@2026", "admin-invite-device");
+    const pendingToken = await login("applicant@susukonnect.app", "Member@2026", "pending-invite-device");
+
+    const allGroups = await request(app).get("/v1/groups").set("Authorization", `Bearer ${leaderToken}`);
+    expect(allGroups.status).toBe(200);
+    const fixedGroup = allGroups.body.data.find((entry: { id: string }) => entry.id === "grp_fixed_001");
+    expect(fixedGroup).toBeTruthy();
+
+    const filtered = await request(app)
+      .get(
+        `/v1/groups?community=${encodeURIComponent("West African")}&location=${encodeURIComponent(
+          "New York"
+        )}&contributionAmount=200&startDate=${encodeURIComponent(fixedGroup.startDate as string)}`
+      )
+      .set("Authorization", `Bearer ${leaderToken}`);
+    expect(filtered.status).toBe(200);
+    expect(filtered.body.data.some((entry: { id: string }) => entry.id === "grp_fixed_001")).toBe(true);
+
+    const created = await request(app)
+      .post("/v1/groups")
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        name: "Invite Link Test Group",
+        description: "Group to validate monthly payouts and private invite links.",
+        communityType: "General",
+        location: "New York",
+        startDate: fixedGroup.startDate,
+        contributionAmount: 125,
+        currency: "USD",
+        totalMembers: 3,
+        payoutFrequency: "monthly",
+        payoutOrderLogic: "fixed",
+        gracePeriodDays: 2,
+        requiresLeaderApproval: true,
+        rules: "Pay monthly before the 5th.",
+      });
+    expect(created.status).toBe(201);
+    expect(created.body.data.payoutFrequency).toBe("monthly");
+
+    const invalidFrequency = await request(app)
+      .post("/v1/groups")
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({
+        name: "Invalid Frequency Group",
+        description: "Should fail validation.",
+        communityType: "General",
+        location: "New York",
+        startDate: fixedGroup.startDate,
+        contributionAmount: 100,
+        currency: "USD",
+        totalMembers: 3,
+        payoutFrequency: "weekly",
+        payoutOrderLogic: "fixed",
+        gracePeriodDays: 2,
+        requiresLeaderApproval: true,
+        rules: "Monthly only.",
+      });
+    expect(invalidFrequency.status).toBe(400);
+
+    const reviewPendingKyc = await request(app)
+      .post("/v1/admin/kyc/usr_pending/review")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ status: "verified" });
+    expect(reviewPendingKyc.status).toBe(200);
+
+    const invite = await request(app)
+      .get("/v1/groups/grp_fixed_001/invite-link")
+      .set("Authorization", `Bearer ${leaderToken}`);
+    expect(invite.status).toBe(200);
+    expect(invite.body.data.inviteCode).toBeTruthy();
+    expect(invite.body.data.inviteLink).toContain(invite.body.data.inviteCode);
+
+    const joinedByInvite = await request(app)
+      .post("/v1/groups/join-by-invite")
+      .set("Authorization", `Bearer ${pendingToken}`)
+      .send({ inviteCode: invite.body.data.inviteCode });
+    expect(joinedByInvite.status).toBe(200);
+    expect(joinedByInvite.body.data.id).toBe("grp_fixed_001");
+
+    const approved = await request(app)
+      .post("/v1/groups/grp_fixed_001/join-requests/usr_pending/decision")
+      .set("Authorization", `Bearer ${leaderToken}`)
+      .send({ decision: "approve" });
+    expect(approved.status).toBe(200);
+    expect(approved.body.data.memberIds).toContain("usr_pending");
+
+    const trustForPending = await request(app)
+      .get("/v1/groups/grp_fixed_001/trust-indicators")
+      .set("Authorization", `Bearer ${pendingToken}`);
+    expect(trustForPending.status).toBe(200);
+    const pendingSelf = trustForPending.body.data.find((entry: { userId: string }) => entry.userId === "usr_pending");
+    const leaderView = trustForPending.body.data.find((entry: { userId: string }) => entry.userId === "usr_leader");
+    expect(typeof pendingSelf?.internalTrustScore).toBe("number");
+    expect(Object.prototype.hasOwnProperty.call(leaderView, "internalTrustScore")).toBe(false);
+
+    const trustForAdmin = await request(app)
+      .get("/v1/groups/grp_fixed_001/trust-indicators")
+      .set("Authorization", `Bearer ${adminToken}`);
+    expect(trustForAdmin.status).toBe(200);
+    const leaderAsAdmin = trustForAdmin.body.data.find((entry: { userId: string }) => entry.userId === "usr_leader");
+    expect(typeof leaderAsAdmin?.internalTrustScore).toBe("number");
+  });
+
   it("allows admins to run compliance, fraud, disputes, and audit operations", async () => {
     const adminToken = await login("admin@susukonnect.app", "Admin@2026", "admin-ops-device");
     const memberToken = await login("member@susukonnect.app", "Member@2026", "member-dispute-device");

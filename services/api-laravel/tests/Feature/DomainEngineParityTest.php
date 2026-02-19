@@ -203,6 +203,85 @@ final class DomainEngineParityTest extends TestCase
         self::assertArrayHasKey('openFraudFlags', $queue);
     }
 
+    public function testSavingsGroupInviteSearchAndTrustIndicatorsParity(): void
+    {
+        $leader = $this->completeLogin('leader@susukonnect.app', 'Leader@2026', 'leader-invite');
+        $admin = $this->completeLogin('admin@susukonnect.app', 'Admin@2026', 'admin-invite');
+        $pending = $this->completeLogin('applicant@susukonnect.app', 'Member@2026', 'pending-invite');
+
+        $groups = $this->engine->listGroups((string) $leader['user']['id']);
+        $fixedGroup = array_values(array_filter($groups, static fn (array $group): bool => $group['id'] === 'grp_fixed_001'))[0];
+        $filtered = $this->engine->listGroups((string) $leader['user']['id'], [
+            'community' => 'west african',
+            'location' => 'new york',
+            'contributionAmount' => '200',
+            'startDate' => (string) $fixedGroup['startDate'],
+        ]);
+        self::assertNotEmpty($filtered);
+        self::assertSame('grp_fixed_001', $filtered[0]['id']);
+
+        $created = $this->engine->createGroup((string) $leader['user']['id'], [
+            'name' => 'Invite Link Test Group',
+            'description' => 'Group to validate monthly payouts and private invite links.',
+            'communityType' => 'General',
+            'location' => 'New York',
+            'startDate' => (string) $fixedGroup['startDate'],
+            'contributionAmount' => 125,
+            'currency' => 'USD',
+            'totalMembers' => 3,
+            'payoutFrequency' => 'monthly',
+            'payoutOrderLogic' => 'fixed',
+            'gracePeriodDays' => 2,
+            'requiresLeaderApproval' => true,
+            'rules' => 'Pay monthly before the 5th.',
+        ]);
+        self::assertSame('monthly', $created['payoutFrequency']);
+        self::assertNotEmpty($created['inviteCode']);
+
+        try {
+            $this->engine->createGroup((string) $leader['user']['id'], [
+                'name' => 'Invalid Frequency Group',
+                'description' => 'Should fail validation.',
+                'communityType' => 'General',
+                'location' => 'New York',
+                'startDate' => (string) $fixedGroup['startDate'],
+                'contributionAmount' => 125,
+                'currency' => 'USD',
+                'totalMembers' => 3,
+                'payoutFrequency' => 'weekly',
+                'payoutOrderLogic' => 'fixed',
+                'gracePeriodDays' => 2,
+                'requiresLeaderApproval' => true,
+                'rules' => 'Monthly only.',
+            ]);
+            self::fail('Expected invalid payout frequency to fail.');
+        } catch (DomainHttpException $exception) {
+            self::assertSame('INVALID_PAYOUT_FREQUENCY', $exception->errorCode());
+        }
+
+        $this->engine->reviewKyc((string) $admin['user']['id'], 'usr_pending', 'verified');
+
+        $invite = $this->engine->groupInviteLink((string) $leader['user']['id'], 'grp_fixed_001');
+        self::assertNotEmpty($invite['inviteCode']);
+        self::assertStringContainsString((string) $invite['inviteCode'], (string) $invite['inviteLink']);
+
+        $joined = $this->engine->joinGroupByInvite((string) $pending['user']['id'], (string) $invite['inviteCode']);
+        self::assertSame('grp_fixed_001', $joined['id']);
+
+        $approved = $this->engine->reviewJoinRequest((string) $leader['user']['id'], 'grp_fixed_001', 'usr_pending', 'approve');
+        self::assertContains('usr_pending', $approved['memberIds']);
+
+        $trustForPending = $this->engine->groupTrustIndicators((string) $pending['user']['id'], 'grp_fixed_001');
+        $pendingSelf = array_values(array_filter($trustForPending, static fn (array $row): bool => $row['userId'] === 'usr_pending'))[0];
+        $leaderPublic = array_values(array_filter($trustForPending, static fn (array $row): bool => $row['userId'] === 'usr_leader'))[0];
+        self::assertArrayHasKey('internalTrustScore', $pendingSelf);
+        self::assertArrayNotHasKey('internalTrustScore', $leaderPublic);
+
+        $trustForAdmin = $this->engine->groupTrustIndicators((string) $admin['user']['id'], 'grp_fixed_001');
+        $leaderInternal = array_values(array_filter($trustForAdmin, static fn (array $row): bool => $row['userId'] === 'usr_leader'))[0];
+        self::assertArrayHasKey('internalTrustScore', $leaderInternal);
+    }
+
     public function testHighTrustOnboardingAndBiometricParity(): void
     {
         $email = 'new.user+' . uniqid('', true) . '@susukonnect.app';

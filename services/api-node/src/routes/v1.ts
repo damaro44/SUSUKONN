@@ -146,6 +146,7 @@ v1Router.get("/groups", requireAuth, (request, response) => {
     community: asString(request.query.community),
     location: asString(request.query.location),
     maxContribution: asString(request.query.maxContribution),
+    contributionAmount: asString(request.query.contributionAmount),
     startDate: asString(request.query.startDate),
   };
   const data = engine.listGroups(request.authUser!.id, filters);
@@ -163,6 +164,7 @@ v1Router.post("/groups", requireAuth, (request, response) => {
       contributionAmount: z.number().positive(),
       currency: z.enum(CURRENCIES),
       totalMembers: z.number().min(2),
+      payoutFrequency: z.string().default("monthly"),
       payoutOrderLogic: z.enum(["fixed", "voting", "priority"]),
       gracePeriodDays: z.number().min(0),
       requiresLeaderApproval: z.boolean(),
@@ -175,6 +177,22 @@ v1Router.post("/groups", requireAuth, (request, response) => {
 
 v1Router.post("/groups/:groupId/join", requireAuth, (request, response) => {
   const data = engine.joinGroup(request.authUser!.id, pathParam(request.params.groupId));
+  response.json({ data });
+});
+
+v1Router.post("/groups/join-by-invite", requireAuth, (request, response) => {
+  const payload = z.object({ inviteCode: z.string().min(6) }).parse(request.body);
+  const data = engine.joinGroupByInvite(request.authUser!.id, payload.inviteCode);
+  response.json({ data });
+});
+
+v1Router.get("/groups/:groupId/invite-link", requireAuth, (request, response) => {
+  const data = engine.groupInviteLink(request.authUser!.id, pathParam(request.params.groupId));
+  response.json({ data });
+});
+
+v1Router.get("/groups/:groupId/trust-indicators", requireAuth, (request, response) => {
+  const data = engine.groupTrustIndicators(request.authUser!.id, pathParam(request.params.groupId));
   response.json({ data });
 });
 

@@ -39,7 +39,10 @@ Route::prefix('v1')->group(function () {
 
     Route::get('/groups', [GroupController::class, 'index']);
     Route::post('/groups', [GroupController::class, 'store']);
+    Route::post('/groups/join-by-invite', [GroupController::class, 'joinByInvite']);
     Route::post('/groups/{groupId}/join', [GroupController::class, 'join']);
+    Route::get('/groups/{groupId}/invite-link', [GroupController::class, 'inviteLink']);
+    Route::get('/groups/{groupId}/trust-indicators', [GroupController::class, 'trustIndicators']);
     Route::post('/groups/{groupId}/join-requests/{userId}/decision', [GroupController::class, 'reviewJoinRequest']);
     Route::post('/groups/{groupId}/remind', [GroupController::class, 'sendReminders']);
     Route::patch('/groups/{groupId}/config', [GroupController::class, 'updateConfig']);

@@ -18,6 +18,7 @@ final class GroupController extends ApiController
                 'community' => $request->query('community'),
                 'location' => $request->query('location'),
                 'maxContribution' => $request->query('maxContribution'),
+                'contributionAmount' => $request->query('contributionAmount'),
                 'startDate' => $request->query('startDate'),
             ]);
         });
@@ -36,6 +37,7 @@ final class GroupController extends ApiController
                 'contributionAmount' => (float) $request->input('contributionAmount', 0),
                 'currency' => (string) $request->input('currency', 'USD'),
                 'totalMembers' => (int) $request->input('totalMembers', 2),
+                'payoutFrequency' => (string) $request->input('payoutFrequency', 'monthly'),
                 'payoutOrderLogic' => (string) $request->input('payoutOrderLogic', 'fixed'),
                 'gracePeriodDays' => (int) $request->input('gracePeriodDays', 0),
                 'requiresLeaderApproval' => (bool) $request->input('requiresLeaderApproval', true),
@@ -44,11 +46,38 @@ final class GroupController extends ApiController
         }, 201);
     }
 
+    public function joinByInvite(Request $request): JsonResponse
+    {
+        return $this->execute(function () use ($request): array {
+            $auth = $this->authContext($request);
+            return $this->engine->joinGroupByInvite(
+                (string) $auth['user']['id'],
+                (string) $request->input('inviteCode', '')
+            );
+        });
+    }
+
     public function join(Request $request, string $groupId): JsonResponse
     {
         return $this->execute(function () use ($request, $groupId): array {
             $auth = $this->authContext($request);
             return $this->engine->joinGroup((string) $auth['user']['id'], $groupId);
+        });
+    }
+
+    public function inviteLink(Request $request, string $groupId): JsonResponse
+    {
+        return $this->execute(function () use ($request, $groupId): array {
+            $auth = $this->authContext($request);
+            return $this->engine->groupInviteLink((string) $auth['user']['id'], $groupId);
+        });
+    }
+
+    public function trustIndicators(Request $request, string $groupId): JsonResponse
+    {
+        return $this->execute(function () use ($request, $groupId): array {
+            $auth = $this->authContext($request);
+            return $this->engine->groupTrustIndicators((string) $auth['user']['id'], $groupId);
         });
     }
 

@@ -417,9 +417,10 @@ final class DomainEngineService
         $community = strtolower((string) ($filters['community'] ?? ''));
         $location = strtolower((string) ($filters['location'] ?? ''));
         $maxContribution = (float) ($filters['maxContribution'] ?? 0);
+        $contributionAmount = (float) ($filters['contributionAmount'] ?? 0);
         $startDate = (string) ($filters['startDate'] ?? '');
 
-        return array_values(array_filter($this->state['groups'], static function (array $group) use ($query, $community, $location, $maxContribution, $startDate): bool {
+        return array_values(array_filter($this->state['groups'], static function (array $group) use ($query, $community, $location, $maxContribution, $contributionAmount, $startDate): bool {
             if ($query !== '' && !str_contains(strtolower((string) $group['name']), $query)) {
                 return false;
             }
@@ -430,6 +431,9 @@ final class DomainEngineService
                 return false;
             }
             if ($maxContribution > 0 && (float) $group['contributionAmount'] > $maxContribution) {
+                return false;
+            }
+            if ($contributionAmount > 0 && Helpers::roundTwo((float) $group['contributionAmount']) !== Helpers::roundTwo($contributionAmount)) {
                 return false;
             }
             if ($startDate !== '' && strtotime((string) $group['startDate']) < strtotime($startDate)) {
@@ -448,6 +452,8 @@ final class DomainEngineService
         $actor = $this->requireUser($userId);
         Helpers::assert(($actor['kyc']['status'] ?? 'unverified') === 'verified', 403, 'KYC_REQUIRED', 'KYC verification is required.');
         Helpers::assert(((int) $input['totalMembers']) >= 2, 400, 'INVALID_GROUP_SIZE', 'Group requires at least 2 members.');
+        $payoutFrequency = (string) ($input['payoutFrequency'] ?? 'monthly');
+        Helpers::assert($payoutFrequency === 'monthly', 400, 'INVALID_PAYOUT_FREQUENCY', 'Only monthly payout frequency is supported.');
         Helpers::assert(in_array((string) $input['currency'], Constants::CURRENCIES, true), 400, 'INVALID_CURRENCY', 'Unsupported currency.');
 
         if ($actor['role'] === 'member') {
@@ -456,9 +462,14 @@ final class DomainEngineService
             });
         }
 
+        $inviteCode = $this->generateInviteCode();
+        while ($this->firstWhere($this->state['groups'], static fn (array $entry): bool => $entry['inviteCode'] === $inviteCode) !== null) {
+            $inviteCode = $this->generateInviteCode();
+        }
+
         $group = [
             'id' => Helpers::uid('grp'),
-            'inviteCode' => Helpers::uid('join'),
+            'inviteCode' => $inviteCode,
             'name' => trim((string) ($input['name'] ?? '')),
             'description' => trim((string) ($input['description'] ?? '')),
             'communityType' => trim((string) ($input['communityType'] ?? '')),
@@ -522,6 +533,65 @@ final class DomainEngineService
         $this->reconcile();
         $this->persist();
         return $this->requireGroup($groupId);
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    public function joinGroupByInvite(string $userId, string $inviteCodeRaw): array
+    {
+        $inviteCode = $this->normalizeInviteCode($inviteCodeRaw);
+        Helpers::assert(strlen($inviteCode) >= 6, 400, 'INVALID_INVITE_CODE', 'Invite code is invalid.');
+        $group = $this->firstWhere(
+            $this->state['groups'],
+            fn (array $entry): bool => $this->normalizeInviteCode((string) $entry['inviteCode']) === $inviteCode
+        );
+        Helpers::assert($group !== null, 404, 'INVITE_NOT_FOUND', 'Invite link is invalid or expired.');
+        return $this->joinGroup($userId, (string) $group['id']);
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    public function groupInviteLink(string $actorId, string $groupId): array
+    {
+        $actor = $this->requireUser($actorId);
+        $group = $this->requireGroup($groupId);
+        $this->assertGroupManager($actor, $group);
+        return [
+            'groupId' => (string) $group['id'],
+            'inviteCode' => (string) $group['inviteCode'],
+            'inviteLink' => 'https://susukonnect.app/join/' . $group['inviteCode'],
+        ];
+    }
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    public function groupTrustIndicators(string $actorId, string $groupId): array
+    {
+        $actor = $this->requireUser($actorId);
+        $group = $this->requireGroup($groupId);
+        $isManager = $actor['role'] === 'admin' || $actor['id'] === $group['leaderId'];
+        $isMember = in_array($actorId, $group['memberIds'], true);
+        Helpers::assert($isManager || $isMember, 403, 'FORBIDDEN', 'Group membership is required.');
+
+        $rows = [];
+        foreach ($group['memberIds'] as $memberId) {
+            $user = $this->requireUser((string) $memberId);
+            $row = [
+                'userId' => (string) $user['id'],
+                'fullName' => (string) $user['fullName'],
+                'verifiedBadge' => (bool) $user['verifiedBadge'],
+                'contributionHistory' => (int) ($user['metrics']['paidContributions'] ?? 0),
+                'completedGroupHistory' => (int) ($user['metrics']['completedGroups'] ?? 0),
+            ];
+            if ($actor['role'] === 'admin' || $actor['id'] === $memberId) {
+                $row['internalTrustScore'] = (int) ($user['metrics']['internalTrustScore'] ?? 0);
+            }
+            $rows[] = $row;
+        }
+        return $rows;
     }
 
     /**
@@ -2431,6 +2501,17 @@ final class DomainEngineService
             return false;
         }
         return strtotime($value) !== false;
+    }
+
+    private function normalizeInviteCode(string $value): string
+    {
+        return strtoupper(trim($value));
+    }
+
+    private function generateInviteCode(): string
+    {
+        $raw = preg_replace('/[^A-Za-z0-9]/', '', Helpers::uid('join'));
+        return strtoupper(substr((string) $raw, -10));
     }
 
     /**
