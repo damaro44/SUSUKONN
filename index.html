@@ -18,12 +18,12 @@
     <header class="hero">
       <div class="hero__inner">
         <div class="hero__branding">
-          <p class="eyebrow">Eclair Technology Assistance</p>
-          <h1>
+          <p class="eyebrow" data-i18n="brand.eyebrow">Eclair Technology Assistance</p>
+          <h1 data-i18n="brand.headline">
             AI-powered digitalization and compliance operations for governments and
             regulated institutions
           </h1>
-          <p class="hero__summary">
+          <p class="hero__summary" data-i18n="brand.summary">
             Plan, execute, and monitor compliance audits, process automation,
             AI workflow deployment, cybersecurity governance, change management,
             and PARAE-aligned capacity building in one efficient platform.
@@ -32,62 +32,100 @@
         </div>
 
         <aside class="hero__panel">
-          <h2>Secure Backend Access</h2>
-          <p class="muted">
+          <div class="language-switcher">
+            <label>
+              <span data-i18n="language.label">Language</span>
+              <select id="language-select">
+                <option value="en">English</option>
+                <option value="fr">Francais</option>
+              </select>
+            </label>
+          </div>
+
+          <h2 data-i18n="auth.heading">Secure Backend Access</h2>
+          <p class="muted" data-i18n="auth.summary">
             Authenticate to the live Eclair API for protected operations and
             report exports.
           </p>
+
           <form id="connection-form" class="auth-form">
             <label>
-              API Base URL
+              <span data-i18n="auth.apiBaseLabel">API Base URL</span>
               <input
                 id="api-base-url"
                 name="apiBaseUrl"
                 placeholder="http://localhost:4100/v1"
+                data-i18n-placeholder="auth.apiBasePlaceholder"
               />
             </label>
-            <button class="btn btn--secondary" type="submit">Save API URL</button>
+            <button class="btn btn--secondary" type="submit" data-i18n="auth.saveApiButton">
+              Save API URL
+            </button>
           </form>
+
           <form id="login-form" class="auth-form">
             <label>
-              Work Email
+              <span data-i18n="auth.emailLabel">Work Email</span>
               <input
                 type="email"
                 name="email"
                 placeholder="admin@eclair.tech"
+                data-i18n-placeholder="auth.emailPlaceholder"
                 required
               />
             </label>
             <label>
-              Password
+              <span data-i18n="auth.passwordLabel">Password</span>
               <input
                 type="password"
                 name="password"
                 placeholder="********"
+                data-i18n-placeholder="auth.passwordPlaceholder"
                 required
               />
             </label>
-            <button class="btn btn--primary" type="submit">Sign in</button>
+            <button class="btn btn--primary" type="submit" data-i18n="auth.signInButton">
+              Sign in
+            </button>
             <button
               class="btn btn--secondary"
               type="button"
               id="logout-btn"
               disabled
+              data-i18n="auth.signOutButton"
             >
               Sign out
             </button>
           </form>
-          <p class="muted small" id="auth-status">Not authenticated.</p>
+
+          <p class="muted small" id="auth-status" data-i18n="auth.notAuthenticated">Not authenticated.</p>
+
+          <section id="capabilities-panel" class="capabilities hidden">
+            <h3 data-i18n="capabilities.title">Role Capabilities</h3>
+            <p class="muted small" id="capabilities-role"></p>
+            <div class="capabilities-grid">
+              <div>
+                <strong data-i18n="capabilities.allowed">Allowed</strong>
+                <ul id="capabilities-allowed"></ul>
+              </div>
+              <div>
+                <strong data-i18n="capabilities.restricted">Restricted</strong>
+                <ul id="capabilities-restricted"></ul>
+              </div>
+            </div>
+          </section>
+
           <div class="quick-actions">
-            <button class="btn btn--secondary" id="refresh-live-data" type="button">
+            <button class="btn btn--secondary" id="refresh-live-data" type="button" data-i18n="auth.refreshButton">
               Refresh live data
             </button>
           </div>
+
           <div class="quick-actions" id="report-actions">
-            <button class="btn btn--secondary" id="download-csv" type="button" disabled>
+            <button class="btn btn--secondary" id="download-csv" type="button" disabled data-i18n="auth.downloadCsv">
               Download CSV report
             </button>
-            <button class="btn btn--secondary" id="download-pdf" type="button" disabled>
+            <button class="btn btn--secondary" id="download-pdf" type="button" disabled data-i18n="auth.downloadPdf">
               Download PDF report
             </button>
           </div>
@@ -99,74 +137,82 @@
     <main class="container" id="app-main">
       <section class="panel">
         <div class="panel__header">
-          <h2>Program Overview</h2>
-          <p class="muted">Cross-service KPIs aligned to national digital standards and PARAE priorities.</p>
+          <h2 data-i18n="overview.title">Program Overview</h2>
+          <p class="muted" data-i18n="overview.subtitle">
+            Cross-service KPIs aligned to national digital standards and PARAE priorities.
+          </p>
         </div>
         <div class="kpi-grid" id="kpi-grid"></div>
       </section>
 
       <section class="panel panel--stacked">
         <div class="panel__header">
-          <h2>Institution Profile</h2>
-          <p class="muted">Baseline context used by the AI planning engine.</p>
+          <h2 data-i18n="profile.title">Institution Profile</h2>
+          <p class="muted" data-i18n="profile.subtitle">Baseline context used by the AI planning engine.</p>
         </div>
         <form id="profile-form" class="form-grid">
           <label>
-            Institution Name
-            <input name="institutionName" required placeholder="e.g. Ministry of Public Service" />
+            <span data-i18n="profile.institutionName">Institution Name</span>
+            <input
+              name="institutionName"
+              required
+              placeholder="e.g. Ministry of Public Service"
+              data-i18n-placeholder="profile.institutionNamePlaceholder"
+            />
           </label>
           <label>
-            Institution Type
+            <span data-i18n="profile.institutionType">Institution Type</span>
             <select name="institutionType" required>
-              <option value="">Select...</option>
-              <option>Government Agency</option>
-              <option>Ministry</option>
-              <option>Public Institution</option>
-              <option>Regulated Private Organization</option>
+              <option value="" data-i18n="common.select">Select...</option>
+              <option data-i18n="profile.type.governmentAgency">Government Agency</option>
+              <option data-i18n="profile.type.ministry">Ministry</option>
+              <option data-i18n="profile.type.publicInstitution">Public Institution</option>
+              <option data-i18n="profile.type.regulatedPrivate">Regulated Private Organization</option>
             </select>
           </label>
           <label>
-            Country / Region
-            <input name="region" required placeholder="e.g. Rwanda" />
+            <span data-i18n="profile.region">Country / Region</span>
+            <input name="region" required placeholder="e.g. Rwanda" data-i18n-placeholder="profile.regionPlaceholder" />
           </label>
           <label>
-            Digital Maturity (1-5)
+            <span data-i18n="profile.digitalMaturity">Digital Maturity (1-5)</span>
             <input name="digitalMaturity" type="number" min="1" max="5" required />
           </label>
           <label>
-            PARAE Preparedness (1-5)
+            <span data-i18n="profile.paraePreparedness">PARAE Preparedness (1-5)</span>
             <input name="paraePreparedness" type="number" min="1" max="5" required />
           </label>
           <label>
-            Annual Compliance Budget (USD)
+            <span data-i18n="profile.budget">Annual Compliance Budget (USD)</span>
             <input name="budget" type="number" min="0" step="1000" required />
           </label>
           <label class="full">
-            Strategic Objectives
+            <span data-i18n="profile.objectives">Strategic Objectives</span>
             <textarea
               name="objectives"
               rows="3"
               placeholder="Summarize desired outcomes: service digitization, response time reduction, audit readiness, etc."
+              data-i18n-placeholder="profile.objectivesPlaceholder"
               required
             ></textarea>
           </label>
-          <button type="submit" class="btn btn--primary">Save profile</button>
+          <button type="submit" class="btn btn--primary" data-i18n="profile.saveButton">Save profile</button>
         </form>
       </section>
 
       <div class="split-grid">
         <section class="panel">
           <div class="panel__header">
-            <h2>Service Planner</h2>
-            <p class="muted">Track all six Eclair service lines in one view.</p>
+            <h2 data-i18n="services.title">Service Planner</h2>
+            <p class="muted" data-i18n="services.subtitle">Track all six Eclair service lines in one view.</p>
           </div>
           <div id="service-cards" class="service-cards"></div>
         </section>
 
         <section class="panel">
           <div class="panel__header">
-            <h2>AI Prioritized Action Queue</h2>
-            <p class="muted">Generated from risk, impact, and readiness signals.</p>
+            <h2 data-i18n="queue.title">AI Prioritized Action Queue</h2>
+            <p class="muted" data-i18n="queue.subtitle">Generated from risk, impact, and readiness signals.</p>
           </div>
           <ol id="action-queue" class="action-queue"></ol>
         </section>
@@ -175,73 +221,93 @@
       <div class="split-grid">
         <section class="panel panel--stacked">
           <div class="panel__header">
-            <h2>Compliance Audit Tracker</h2>
-            <p class="muted">Register findings and assign mitigation owners.</p>
+            <h2 data-i18n="audits.title">Compliance Audit Tracker</h2>
+            <p class="muted" data-i18n="audits.subtitle">Register findings and assign mitigation owners.</p>
             <p class="muted small hidden" id="audit-rbac-note"></p>
           </div>
           <form id="audit-form" class="form-grid compact">
             <label>
-              Standard / Requirement
-              <input name="standard" required placeholder="PARAE Section / National Standard" />
+              <span data-i18n="audits.standard">Standard / Requirement</span>
+              <input
+                name="standard"
+                required
+                placeholder="PARAE Section / National Standard"
+                data-i18n-placeholder="audits.standardPlaceholder"
+              />
             </label>
             <label>
-              Severity
+              <span data-i18n="audits.severity">Severity</span>
               <select name="severity" required>
-                <option>Critical</option>
-                <option>High</option>
-                <option>Medium</option>
-                <option>Low</option>
+                <option value="Critical" data-i18n="severity.critical">Critical</option>
+                <option value="High" data-i18n="severity.high">High</option>
+                <option value="Medium" data-i18n="severity.medium">Medium</option>
+                <option value="Low" data-i18n="severity.low">Low</option>
               </select>
             </label>
             <label>
-              Responsible Unit
-              <input name="owner" required placeholder="e.g. ICT Directorate" />
+              <span data-i18n="audits.owner">Responsible Unit</span>
+              <input
+                name="owner"
+                required
+                placeholder="e.g. ICT Directorate"
+                data-i18n-placeholder="audits.ownerPlaceholder"
+              />
             </label>
             <label>
-              Due Date
+              <span data-i18n="audits.dueDate">Due Date</span>
               <input name="dueDate" type="date" required />
             </label>
             <label class="full">
-              Finding
+              <span data-i18n="audits.finding">Finding</span>
               <textarea name="finding" rows="2" required></textarea>
             </label>
-            <button type="submit" class="btn btn--primary">Add audit item</button>
+            <button type="submit" class="btn btn--primary" data-i18n="audits.addButton">Add audit item</button>
           </form>
           <div id="audit-list" class="list"></div>
         </section>
 
         <section class="panel panel--stacked">
           <div class="panel__header">
-            <h2>Training & Change Management</h2>
-            <p class="muted">Plan PARAE-aligned staff upskilling and adoption campaigns.</p>
+            <h2 data-i18n="training.title">Training & Change Management</h2>
+            <p class="muted" data-i18n="training.subtitle">Plan PARAE-aligned staff upskilling and adoption campaigns.</p>
             <p class="muted small hidden" id="training-rbac-note"></p>
           </div>
           <form id="training-form" class="form-grid compact">
             <label>
-              Program Name
-              <input name="program" required placeholder="e.g. Responsible AI for Public Services" />
+              <span data-i18n="training.program">Program Name</span>
+              <input
+                name="program"
+                required
+                placeholder="e.g. Responsible AI for Public Services"
+                data-i18n-placeholder="training.programPlaceholder"
+              />
             </label>
             <label>
-              Target Group
-              <input name="audience" required placeholder="e.g. 120 case officers" />
+              <span data-i18n="training.audience">Target Group</span>
+              <input
+                name="audience"
+                required
+                placeholder="e.g. 120 case officers"
+                data-i18n-placeholder="training.audiencePlaceholder"
+              />
             </label>
             <label>
-              Delivery Mode
+              <span data-i18n="training.mode">Delivery Mode</span>
               <select name="mode" required>
-                <option>In-person</option>
-                <option>Hybrid</option>
-                <option>Virtual</option>
+                <option value="In-person" data-i18n="training.mode.inperson">In-person</option>
+                <option value="Hybrid" data-i18n="training.mode.hybrid">Hybrid</option>
+                <option value="Virtual" data-i18n="training.mode.virtual">Virtual</option>
               </select>
             </label>
             <label>
-              Completion Target (%)
+              <span data-i18n="training.target">Completion Target (%)</span>
               <input name="target" type="number" min="1" max="100" required />
             </label>
             <label class="full">
-              Adoption Objective
+              <span data-i18n="training.objective">Adoption Objective</span>
               <textarea name="objective" rows="2" required></textarea>
             </label>
-            <button type="submit" class="btn btn--primary">Add training plan</button>
+            <button type="submit" class="btn btn--primary" data-i18n="training.addButton">Add training plan</button>
           </form>
           <div id="training-list" class="list"></div>
         </section>
@@ -249,15 +315,15 @@
 
       <section class="panel">
         <div class="panel__header">
-          <h2>Cybersecurity Governance & Workflow Automation Indicators</h2>
-          <p class="muted">Control posture and automation outcomes for executives.</p>
+          <h2 data-i18n="indicators.title">Cybersecurity Governance & Workflow Automation Indicators</h2>
+          <p class="muted" data-i18n="indicators.subtitle">Control posture and automation outcomes for executives.</p>
         </div>
         <div class="indicator-grid" id="indicator-grid"></div>
       </section>
     </main>
 
     <footer class="footer">
-      <p>
+      <p data-i18n="footer.text">
         Eclair Technology Assistance - Trusted partner for AI digital transformation,
         compliance execution, and institutional capacity development.
       </p>

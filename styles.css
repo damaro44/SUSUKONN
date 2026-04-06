@@ -97,6 +97,39 @@ h1 {
   gap: 0.55rem;
 }
 
+.language-switcher {
+  margin-bottom: 0.65rem;
+}
+
+.language-switcher select {
+  margin-top: 0.35rem;
+}
+
+.capabilities {
+  margin-top: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.65rem;
+  background: rgba(1, 14, 45, 0.5);
+}
+
+.capabilities h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.capabilities-grid {
+  margin-top: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.capabilities-grid ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1rem;
+}
+
 .rbac-disabled {
   opacity: 0.58;
   pointer-events: none;
@@ -380,7 +413,8 @@ textarea:focus {
   .kpi-grid,
   .indicator-grid,
   .form-grid,
-  .form-grid.compact {
+  .form-grid.compact,
+  .capabilities-grid {
     grid-template-columns: 1fr;
   }
 }

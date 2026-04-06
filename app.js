@@ -1,5 +1,8 @@
-const STORAGE_KEY = "eclair-tech-assistance-v2";
+import { I18N, PERMISSION_KEYS, SECTOR_TAG_KEYS } from "./i18n.js";
+
+const STORAGE_KEY = "eclair-tech-assistance-v4";
 const DEFAULT_API_BASE_URL = "http://localhost:4100/v1";
+
 const ROLE_PERMISSIONS = {
   super_admin: ["refresh", "createAudit", "createTraining", "downloadReports"],
   compliance_officer: ["refresh", "createAudit", "createTraining", "downloadReports"],
@@ -8,6 +11,7 @@ const ROLE_PERMISSIONS = {
 };
 
 const appState = {
+  language: "en",
   apiBaseUrl: DEFAULT_API_BASE_URL,
   auth: {
     token: "",
@@ -18,67 +22,17 @@ const appState = {
   trainings: [],
   dashboard: null,
   services: [
-    {
-      key: "compliance",
-      title: "Compliance Audits",
-      detail:
-        "Assess legal, regulatory, and policy controls against PARAE requirements and national digital standards.",
-      progress: 20,
-      risk: 72
-    },
-    {
-      key: "automation",
-      title: "Process Automation",
-      detail:
-        "Map high-friction manual procedures and prioritize automation candidates with measurable ROI.",
-      progress: 30,
-      risk: 62
-    },
-    {
-      key: "ai-workflow",
-      title: "AI-driven Workflow Solutions",
-      detail:
-        "Deploy responsible AI workflows for citizen services, case handling, and internal approvals.",
-      progress: 15,
-      risk: 66
-    },
-    {
-      key: "change",
-      title: "Change Management",
-      detail:
-        "Coordinate executive sponsorship, communication cadence, and adoption KPIs across departments.",
-      progress: 25,
-      risk: 58
-    },
-    {
-      key: "cyber",
-      title: "Cybersecurity Governance",
-      detail:
-        "Implement control ownership, risk treatment workflows, and security accountability frameworks.",
-      progress: 35,
-      risk: 69
-    },
-    {
-      key: "training",
-      title: "PARAE-aligned Staff Training",
-      detail:
-        "Build competency pathways for policy, technical, and operational teams with outcome tracking.",
-      progress: 18,
-      risk: 60
-    }
+    { key: "compliance", progress: 20, risk: 72 },
+    { key: "automation", progress: 30, risk: 62 },
+    { key: "ai-workflow", progress: 15, risk: 66 },
+    { key: "change", progress: 25, risk: 58 },
+    { key: "cyber", progress: 35, risk: 69 },
+    { key: "training", progress: 18, risk: 60 }
   ]
 };
 
-const sectorTags = [
-  "Government Agencies",
-  "Ministries",
-  "Public Institutions",
-  "Regulated Private Sector",
-  "National Digital Standards",
-  "PARAE Alignment"
-];
-
 const el = {
+  languageSelect: document.getElementById("language-select"),
   connectionForm: document.getElementById("connection-form"),
   apiBaseUrl: document.getElementById("api-base-url"),
   loginForm: document.getElementById("login-form"),
@@ -89,6 +43,10 @@ const el = {
   downloadPdf: document.getElementById("download-pdf"),
   reportActions: document.getElementById("report-actions"),
   reportRbacNote: document.getElementById("report-rbac-note"),
+  capabilitiesPanel: document.getElementById("capabilities-panel"),
+  capabilitiesRole: document.getElementById("capabilities-role"),
+  capabilitiesAllowed: document.getElementById("capabilities-allowed"),
+  capabilitiesRestricted: document.getElementById("capabilities-restricted"),
   kpiGrid: document.getElementById("kpi-grid"),
   serviceCards: document.getElementById("service-cards"),
   actionQueue: document.getElementById("action-queue"),
@@ -106,66 +64,100 @@ const el = {
   sectorTags: document.getElementById("sector-tags")
 };
 
-function init() {
-  hydrateState();
-  renderTags();
-  syncConnectionFields();
-  renderAll();
-  updateAuthUi();
-  bindEvents();
-  registerServiceWorker();
-  if (appState.auth.token) {
-    refreshLiveData().catch(() => {
-      logoutLocal("Session expired. Please sign in again.");
-    });
+function t(key, vars = {}) {
+  const dictionary = I18N[appState.language] || I18N.en;
+  let text = dictionary[key] || I18N.en[key] || key;
+  for (const [name, value] of Object.entries(vars)) {
+    text = text.replaceAll(`{${name}}`, String(value));
+  }
+  return text;
+}
+
+function applyI18n() {
+  document.documentElement.lang = appState.language;
+
+  const titleText = t("meta.title");
+  document.title = titleText;
+
+  const descriptionMeta = document.querySelector('meta[name="description"]');
+  if (descriptionMeta) {
+    descriptionMeta.setAttribute("content", t("meta.description"));
+  }
+
+  document.querySelectorAll("[data-i18n]").forEach(node => {
+    const key = node.getAttribute("data-i18n");
+    if (!key) return;
+    node.textContent = t(key);
+  });
+
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(node => {
+    const key = node.getAttribute("data-i18n-placeholder");
+    if (!key) return;
+    node.setAttribute("placeholder", t(key));
+  });
+
+  if (el.languageSelect) {
+    const options = Array.from(el.languageSelect.options);
+    if (options[0]) options[0].textContent = t("language.english");
+    if (options[1]) options[1].textContent = t("language.french");
+    el.languageSelect.value = appState.language;
   }
 }
 
-function bindEvents() {
-  el.connectionForm.addEventListener("submit", handleConnectionSubmit);
-  el.loginForm.addEventListener("submit", handleLoginSubmit);
-  el.logoutBtn.addEventListener("click", () => logoutLocal("Signed out."));
-  el.refreshLiveData.addEventListener("click", () => {
-    refreshLiveData().catch(handleError);
-  });
-  el.downloadCsv.addEventListener("click", () => {
-    downloadReport("csv").catch(handleError);
-  });
-  el.downloadPdf.addEventListener("click", () => {
-    downloadReport("pdf").catch(handleError);
-  });
+function hasPermission(permission) {
+  const role = appState.auth.user?.role;
+  return Boolean(role && ROLE_PERMISSIONS[role]?.includes(permission));
+}
 
-  el.profileForm.addEventListener("submit", handleProfileSubmit);
-  el.auditForm.addEventListener("submit", handleAuditSubmit);
-  el.trainingForm.addEventListener("submit", handleTrainingSubmit);
+function roleLabel(role) {
+  return t(`role.${role}`);
+}
+
+function permissionLabel(permission) {
+  return t(`permission.${permission}`);
+}
+
+function renderCapabilities() {
+  const authed = Boolean(appState.auth.user);
+  el.capabilitiesPanel.classList.toggle("hidden", !authed);
+  if (!authed) {
+    return;
+  }
+
+  const role = appState.auth.user.role;
+  const allowed = ROLE_PERMISSIONS[role] || [];
+  const restricted = PERMISSION_KEYS.filter(permission => !allowed.includes(permission));
+
+  el.capabilitiesRole.textContent = `${t("capabilities.rolePrefix")} ${roleLabel(role)}`;
+  el.capabilitiesAllowed.innerHTML = allowed.map(permission => `<li>${permissionLabel(permission)}</li>`).join("");
+  el.capabilitiesRestricted.innerHTML = restricted
+    .map(permission => `<li>${permissionLabel(permission)}</li>`)
+    .join("");
+}
+
+function renderTags() {
+  el.sectorTags.innerHTML = SECTOR_TAG_KEYS.map(key => `<span class="tag">${t(key)}</span>`).join("");
 }
 
 function hydrateState() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) {
-    return;
-  }
+  if (!saved) return;
 
   try {
     const parsed = JSON.parse(saved);
+    if (parsed.language === "fr" || parsed.language === "en") {
+      appState.language = parsed.language;
+    }
     if (typeof parsed.apiBaseUrl === "string" && parsed.apiBaseUrl.trim()) {
       appState.apiBaseUrl = parsed.apiBaseUrl;
     }
     if (parsed.auth?.token && parsed.auth?.user) {
       appState.auth = parsed.auth;
     }
-    if (parsed.profile) {
-      appState.profile = parsed.profile;
-    }
-    if (Array.isArray(parsed.audits)) {
-      appState.audits = parsed.audits;
-    }
-    if (Array.isArray(parsed.trainings)) {
-      appState.trainings = parsed.trainings;
-    }
-    if (parsed.dashboard) {
-      appState.dashboard = parsed.dashboard;
-    }
+    if (parsed.profile) appState.profile = parsed.profile;
+    if (Array.isArray(parsed.audits)) appState.audits = parsed.audits;
+    if (Array.isArray(parsed.trainings)) appState.trainings = parsed.trainings;
+    if (parsed.dashboard) appState.dashboard = parsed.dashboard;
     if (Array.isArray(parsed.services) && parsed.services.length === 6) {
       appState.services = parsed.services;
     }
@@ -178,6 +170,7 @@ function persistState() {
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
+      language: appState.language,
       apiBaseUrl: appState.apiBaseUrl,
       auth: appState.auth,
       profile: appState.profile,
@@ -193,77 +186,21 @@ function syncConnectionFields() {
   el.apiBaseUrl.value = appState.apiBaseUrl;
 }
 
-function handleConnectionSubmit(event) {
-  event.preventDefault();
-  const formData = new FormData(event.currentTarget);
-  const raw = formData.get("apiBaseUrl")?.toString().trim();
-  if (!raw) {
-    toast("API base URL cannot be empty.", "error");
-    return;
-  }
+function setSectionPermission(formElement, noteElement, isAllowed, message, showNote = true) {
+  const inputs = formElement.querySelectorAll("input, select, textarea, button");
+  inputs.forEach(input => {
+    input.disabled = !isAllowed;
+  });
 
-  appState.apiBaseUrl = raw.replace(/\/+$/, "");
-  persistState();
-  toast("API base URL updated.", "success");
+  formElement.classList.toggle("rbac-disabled", !isAllowed);
+  noteElement.textContent = !isAllowed && showNote ? message : "";
+  noteElement.classList.toggle("hidden", isAllowed || !showNote);
 }
 
-async function handleLoginSubmit(event) {
-  event.preventDefault();
-  const formData = new FormData(event.currentTarget);
-  const email = formData.get("email")?.toString().trim() || "";
-  const password = formData.get("password")?.toString() || "";
-
-  if (!email || !password) {
-    toast("Provide email and password.", "error");
-    return;
-  }
-
-  try {
-    const login = await apiFetch("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password })
-    });
-
-    appState.auth.token = login.data.accessToken;
-    appState.auth.user = login.data.user;
-    persistState();
-    updateAuthUi();
-    event.currentTarget.reset();
-    toast(`Welcome, ${login.data.user.fullName}.`, "success");
-
-    await refreshLiveData();
-  } catch (error) {
-    handleError(error);
-  }
-}
-
-function logoutLocal(message) {
-  appState.auth = { token: "", user: null };
-  appState.dashboard = null;
-  persistState();
-  updateAuthUi();
-  if (message) {
-    toast(message, "success");
-  }
-}
-
-async function refreshLiveData() {
-  ensureAuthed();
-
-  const [dashboardResult, auditsResult, trainingsResult] = await Promise.all([
-    apiFetch("/dashboard"),
-    apiFetch("/compliance/audits"),
-    apiFetch("/training/plans")
-  ]);
-
-  appState.dashboard = dashboardResult.data;
-  appState.audits = auditsResult.data;
-  appState.trainings = trainingsResult.data;
-
-  mapServicesFromLiveData();
-  persistState();
-  renderAll();
-  toast("Live data refreshed.", "success");
+function toggleReportPermission(isAllowed, message, showNote = true) {
+  el.reportActions.classList.toggle("hidden", !isAllowed);
+  el.reportRbacNote.textContent = !isAllowed && showNote ? message : "";
+  el.reportRbacNote.classList.toggle("hidden", isAllowed || !showNote);
 }
 
 function updateAuthUi() {
@@ -274,22 +211,11 @@ function updateAuthUi() {
     el.refreshLiveData.disabled = true;
     el.downloadCsv.disabled = true;
     el.downloadPdf.disabled = true;
-    setSectionPermission(
-      el.auditForm,
-      el.auditRbacNote,
-      false,
-      "Sign in to create audit items.",
-      false
-    );
-    setSectionPermission(
-      el.trainingForm,
-      el.trainingRbacNote,
-      false,
-      "Sign in to create training plans.",
-      false
-    );
-    toggleReportPermission(false, "Sign in to export compliance reports.", false);
-    el.authStatus.textContent = "Not authenticated.";
+    setSectionPermission(el.auditForm, el.auditRbacNote, false, t("rbac.signInCreateAudit"), false);
+    setSectionPermission(el.trainingForm, el.trainingRbacNote, false, t("rbac.signInCreateTraining"), false);
+    toggleReportPermission(false, t("rbac.signInExport"), false);
+    el.authStatus.textContent = t("status.notAuthenticated");
+    renderCapabilities();
     return;
   }
 
@@ -302,62 +228,20 @@ function updateAuthUi() {
   el.downloadCsv.disabled = !canDownloadReports;
   el.downloadPdf.disabled = !canDownloadReports;
 
-  setSectionPermission(
-    el.auditForm,
-    el.auditRbacNote,
-    canCreateAudit,
-    "Your role can view findings but cannot create audit items."
-  );
-  setSectionPermission(
-    el.trainingForm,
-    el.trainingRbacNote,
-    canCreateTraining,
-    "Your role can view plans but cannot create training records."
-  );
-  toggleReportPermission(
-    canDownloadReports,
-    "Your role does not have permission to export compliance reports."
-  );
+  setSectionPermission(el.auditForm, el.auditRbacNote, canCreateAudit, t("rbac.noCreateAudit"));
+  setSectionPermission(el.trainingForm, el.trainingRbacNote, canCreateTraining, t("rbac.noCreateTraining"));
+  toggleReportPermission(canDownloadReports, t("rbac.noExport"));
 
-  el.authStatus.textContent = `Authenticated as ${appState.auth.user.fullName} (${appState.auth.user.role}).`;
-}
-
-function hasPermission(permission) {
-  const role = appState.auth.user?.role;
-  if (!role) {
-    return false;
-  }
-  return ROLE_PERMISSIONS[role]?.includes(permission) || false;
-}
-
-function setSectionPermission(formElement, noteElement, isAllowed, message, showNote = true) {
-  if (!formElement || !noteElement) {
-    return;
-  }
-
-  const inputs = formElement.querySelectorAll("input, select, textarea, button");
-  inputs.forEach(input => {
-    input.disabled = !isAllowed;
+  el.authStatus.textContent = t("status.authenticated", {
+    name: appState.auth.user.fullName,
+    role: roleLabel(appState.auth.user.role)
   });
-
-  formElement.classList.toggle("rbac-disabled", !isAllowed);
-  noteElement.textContent = !isAllowed && showNote ? message : "";
-  noteElement.classList.toggle("hidden", isAllowed || !showNote);
-}
-
-function toggleReportPermission(isAllowed, message, showNote = true) {
-  if (!el.reportActions || !el.reportRbacNote) {
-    return;
-  }
-
-  el.reportActions.classList.toggle("hidden", !isAllowed);
-  el.reportRbacNote.textContent = !isAllowed && showNote ? message : "";
-  el.reportRbacNote.classList.toggle("hidden", isAllowed || !showNote);
+  renderCapabilities();
 }
 
 function ensureAuthed() {
   if (!appState.auth.token) {
-    throw new Error("Please sign in to call the live API.");
+    throw new Error(t("error.signInRequired"));
   }
 }
 
@@ -385,7 +269,7 @@ async function apiFetch(path, options = {}) {
     }
 
     if (response.status === 401) {
-      logoutLocal("Session expired. Please sign in again.");
+      logoutLocal(t("toast.sessionExpired"));
     }
 
     throw new Error(message);
@@ -394,10 +278,29 @@ async function apiFetch(path, options = {}) {
   return response.json();
 }
 
+async function refreshLiveData() {
+  ensureAuthed();
+
+  const [dashboardResult, auditsResult, trainingsResult] = await Promise.all([
+    apiFetch("/dashboard"),
+    apiFetch("/compliance/audits"),
+    apiFetch("/training/plans")
+  ]);
+
+  appState.dashboard = dashboardResult.data;
+  appState.audits = auditsResult.data;
+  appState.trainings = trainingsResult.data;
+
+  mapServicesFromLiveData();
+  persistState();
+  renderAll();
+  toast(t("toast.liveRefreshed"), "success");
+}
+
 async function downloadReport(format) {
   ensureAuthed();
   if (!hasPermission("downloadReports")) {
-    throw new Error("Your role is not allowed to download reports.");
+    throw new Error(t("error.noReportPermission"));
   }
 
   const response = await fetch(`${appState.apiBaseUrl}/reports/compliance?format=${format}`, {
@@ -408,14 +311,7 @@ async function downloadReport(format) {
   });
 
   if (!response.ok) {
-    let message = `Failed to download ${format.toUpperCase()} report.`;
-    try {
-      const payload = await response.json();
-      message = payload?.error?.message || message;
-    } catch {
-      // ignore parse errors
-    }
-    throw new Error(message);
+    throw new Error(`Failed to download ${format.toUpperCase()} report.`);
   }
 
   const blob = await response.blob();
@@ -429,14 +325,12 @@ async function downloadReport(format) {
   anchor.remove();
   URL.revokeObjectURL(url);
 
-  toast(`${format.toUpperCase()} report downloaded.`, "success");
+  toast(format === "pdf" ? t("toast.pdfDownloaded") : t("toast.csvDownloaded"), "success");
 }
 
 function mapServicesFromLiveData() {
   const dashboard = appState.dashboard;
-  if (!dashboard) {
-    return;
-  }
+  if (!dashboard) return;
 
   const risk = clamp(Number(dashboard.riskScore || 0), 0, 100);
   const readiness = clamp(Number(dashboard.readinessScore || 0), 0, 100);
@@ -465,6 +359,60 @@ function mapServicesFromLiveData() {
   });
 }
 
+function handleConnectionSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const raw = formData.get("apiBaseUrl")?.toString().trim();
+  if (!raw) {
+    toast(t("toast.apiEmpty"), "error");
+    return;
+  }
+
+  appState.apiBaseUrl = raw.replace(/\/+$/, "");
+  persistState();
+  toast(t("toast.apiSaved"), "success");
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const email = formData.get("email")?.toString().trim() || "";
+  const password = formData.get("password")?.toString() || "";
+
+  if (!email || !password) {
+    toast(t("toast.credentialsMissing"), "error");
+    return;
+  }
+
+  try {
+    const login = await apiFetch("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password })
+    });
+
+    appState.auth.token = login.data.accessToken;
+    appState.auth.user = login.data.user;
+    persistState();
+    updateAuthUi();
+    event.currentTarget.reset();
+    toast(t("toast.welcome", { name: login.data.user.fullName }), "success");
+
+    await refreshLiveData();
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+function logoutLocal(message) {
+  appState.auth = { token: "", user: null };
+  appState.dashboard = null;
+  persistState();
+  updateAuthUi();
+  if (message) {
+    toast(message, "success");
+  }
+}
+
 function handleProfileSubmit(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
@@ -482,14 +430,14 @@ function handleProfileSubmit(event) {
   tuneServiceModelFromProfile();
   persistState();
   renderAll();
-  toast("Institution profile saved locally.", "success");
+  toast(t("toast.profileSaved"), "success");
 }
 
 async function handleAuditSubmit(event) {
   event.preventDefault();
   ensureAuthed();
   if (!hasPermission("createAudit")) {
-    throw new Error("Your role is not allowed to create audit items.");
+    throw new Error(t("error.noAuditPermission"));
   }
 
   const form = new FormData(event.currentTarget);
@@ -508,7 +456,7 @@ async function handleAuditSubmit(event) {
     });
 
     event.currentTarget.reset();
-    toast("Audit finding created in live backend.", "success");
+    toast(t("toast.auditCreated"), "success");
     await refreshLiveData();
   } catch (error) {
     handleError(error);
@@ -519,7 +467,7 @@ async function handleTrainingSubmit(event) {
   event.preventDefault();
   ensureAuthed();
   if (!hasPermission("createTraining")) {
-    throw new Error("Your role is not allowed to create training plans.");
+    throw new Error(t("error.noTrainingPermission"));
   }
 
   const form = new FormData(event.currentTarget);
@@ -538,7 +486,7 @@ async function handleTrainingSubmit(event) {
     });
 
     event.currentTarget.reset();
-    toast("Training plan created in live backend.", "success");
+    toast(t("toast.trainingCreated"), "success");
     await refreshLiveData();
   } catch (error) {
     handleError(error);
@@ -578,10 +526,7 @@ function computeReadiness() {
     appState.services.reduce((sum, service) => sum + service.progress - service.risk * 0.32, 0) /
     appState.services.length;
 
-  const auditPenalty = appState.audits.length * 1.2;
-  const trainingBonus = appState.trainings.length * 1.7;
-
-  return clamp(Math.round(base + serviceContribution - auditPenalty + trainingBonus), 5, 98);
+  return clamp(Math.round(base + serviceContribution), 5, 98);
 }
 
 function buildKpis() {
@@ -594,14 +539,14 @@ function buildKpis() {
   );
 
   return [
-    { label: "Readiness Score", value: `${readiness}%` },
-    { label: "Average Service Progress", value: `${avgProgress}%` },
+    { label: t("kpi.readiness"), value: `${readiness}%` },
+    { label: t("kpi.avgProgress"), value: `${avgProgress}%` },
     {
-      label: "Governance Risk Index",
+      label: t("kpi.risk"),
       value: appState.dashboard ? `${appState.dashboard.riskScore}/100` : `${avgRisk}/100`
     },
     {
-      label: "Open Audit Findings",
+      label: t("kpi.openFindings"),
       value: appState.dashboard ? String(appState.dashboard.openAuditFindings) : String(appState.audits.length)
     }
   ];
@@ -624,34 +569,34 @@ function buildIndicators() {
 
   return [
     {
-      title: "Critical Findings",
+      title: t("indicator.critical"),
       value: String(openCritical),
-      note: "Immediate executive escalation threshold"
+      note: t("indicator.note.critical")
     },
     {
-      title: "High Findings",
+      title: t("indicator.high"),
       value: String(openHigh),
-      note: "Close within governance sprint cycle"
+      note: t("indicator.note.high")
     },
     {
-      title: "Training Target Coverage",
+      title: t("indicator.coverage"),
       value: `${trainingCoverage}%`,
-      note: "PARAE competency target"
+      note: t("indicator.note.coverage")
     },
     {
-      title: "Automation Progress",
+      title: t("indicator.automation"),
       value: `${automationService?.progress || 0}%`,
-      note: "Public service processing optimization"
+      note: t("indicator.note.automation")
     },
     {
-      title: "AI Workflow Maturity",
+      title: t("indicator.ai"),
       value: `${aiService?.progress || 0}%`,
-      note: "Responsible AI deployment readiness"
+      note: t("indicator.note.ai")
     },
     {
-      title: "Cyber Governance Risk",
+      title: t("indicator.cyber"),
       value: `${appState.services.find(service => service.key === "cyber")?.risk || 0}/100`,
-      note: "Control ownership and risk treatment posture"
+      note: t("indicator.note.cyber")
     }
   ];
 }
@@ -660,17 +605,17 @@ function buildActionQueue() {
   const topRiskServices = [...appState.services]
     .sort((a, b) => b.risk - a.risk)
     .slice(0, 3)
-    .map(service => `Reduce ${service.title.toLowerCase()} risk via targeted 30-day controls.`);
+    .map(service => t("queue.action.reduceRisk", { service: t(`service.${service.key}`).toLowerCase() }));
 
   const actions = [
     appState.audits.length
-      ? `Close ${Math.min(3, appState.audits.length)} highest-severity audit findings and attach evidence packs.`
-      : "Launch initial PARAE and national standards compliance diagnostic.",
+      ? t("queue.action.close", { count: Math.min(3, appState.audits.length) })
+      : t("queue.action.launch"),
     appState.trainings.length
-      ? `Increase completion rates across ${appState.trainings.length} training initiatives through role-based sessions.`
-      : "Start mandatory baseline training on compliance, AI ethics, and cybersecurity governance.",
+      ? t("queue.action.increase", { count: appState.trainings.length })
+      : t("queue.action.startTraining"),
     ...topRiskServices,
-    "Publish monthly steering report with readiness trend, risk heatmap, and mitigation accountability."
+    t("queue.action.publish")
   ];
 
   return actions.slice(0, 6);
@@ -679,10 +624,7 @@ function buildActionQueue() {
 function renderAll() {
   const readiness = computeReadiness();
   el.readinessScore.textContent = `${readiness}%`;
-  el.readinessCaption.textContent =
-    readiness >= 70
-      ? "Institution is on a strong trajectory for scaled digital transformation."
-      : "Focus on high-risk controls, training, and governance acceleration.";
+  el.readinessCaption.textContent = readiness >= 70 ? t("status.readyHigh") : t("status.readyLow");
 
   renderKpis();
   renderServices();
@@ -690,14 +632,11 @@ function renderAll() {
   renderAudits();
   renderTrainings();
   renderIndicators();
-}
-
-function renderTags() {
-  el.sectorTags.innerHTML = sectorTags.map(tag => `<span class="tag">${tag}</span>`).join("");
+  renderTags();
 }
 
 function renderKpis() {
-  const cards = buildKpis()
+  el.kpiGrid.innerHTML = buildKpis()
     .map(
       item => `
         <article class="kpi">
@@ -707,30 +646,27 @@ function renderKpis() {
       `
     )
     .join("");
-
-  el.kpiGrid.innerHTML = cards;
 }
 
 function renderServices() {
-  const cards = appState.services
+  el.serviceCards.innerHTML = appState.services
     .map(service => {
       const badgeClass = service.risk > 70 ? "badge--high" : service.risk > 45 ? "badge--medium" : "badge--low";
-      const badgeLabel = service.risk > 70 ? "High Risk" : service.risk > 45 ? "Medium Risk" : "Low Risk";
+      const badgeLabel =
+        service.risk > 70 ? t("severity.high") : service.risk > 45 ? t("severity.medium") : t("severity.low");
 
       return `
         <article class="service-card">
           <div class="service-head">
-            <h3>${service.title}</h3>
+            <h3>${t(`service.${service.key}`)}</h3>
             <span class="badge ${badgeClass}">${badgeLabel}</span>
           </div>
-          <p class="muted">${service.detail}</p>
-          <p><strong>Progress:</strong> ${service.progress}% &nbsp; | &nbsp; <strong>Risk:</strong> ${service.risk}/100</p>
+          <p class="muted">${t(`service.detail.${service.key}`)}</p>
+          <p><strong>${t("list.progress")}:</strong> ${service.progress}% &nbsp; | &nbsp; <strong>${t("list.risk")}:</strong> ${service.risk}/100</p>
         </article>
       `;
     })
     .join("");
-
-  el.serviceCards.innerHTML = cards;
 }
 
 function renderActionQueue() {
@@ -739,7 +675,7 @@ function renderActionQueue() {
 
 function renderAudits() {
   if (!appState.audits.length) {
-    el.auditList.innerHTML = `<p class="muted">No findings available.</p>`;
+    el.auditList.innerHTML = `<p class="muted">${t("list.noFindings")}</p>`;
     return;
   }
 
@@ -749,10 +685,10 @@ function renderAudits() {
       <article class="list-item">
         <div class="item-head">
           <strong>${item.standard}</strong>
-          <span class="badge ${severityToBadge(item.severity)}">${item.severity}</span>
+          <span class="badge ${severityToBadge(item.severity)}">${translateSeverity(item.severity)}</span>
         </div>
         <p>${item.finding}</p>
-        <p class="muted">Owner: ${item.owner} | Due: ${item.dueDate} | Status: ${item.status}</p>
+        <p class="muted">${t("list.owner")}: ${item.owner} | ${t("list.due")}: ${item.dueDate} | ${t("list.status")}: ${translateAuditStatus(item.status)}</p>
       </article>
     `
     )
@@ -761,26 +697,24 @@ function renderAudits() {
 
 function renderTrainings() {
   if (!appState.trainings.length) {
-    el.trainingList.innerHTML = `<p class="muted">No training plans available.</p>`;
+    el.trainingList.innerHTML = `<p class="muted">${t("list.noTraining")}</p>`;
     return;
   }
 
   el.trainingList.innerHTML = appState.trainings
-    .map(
-      item => {
-        const target = item.targetCompletion ?? item.target;
-        return `
+    .map(item => {
+      const target = item.targetCompletion ?? item.target;
+      return `
       <article class="list-item">
         <div class="item-head">
           <strong>${item.program}</strong>
-          <span class="badge badge--low">${item.mode}</span>
+          <span class="badge badge--low">${translateTrainingMode(item.mode)}</span>
         </div>
         <p>${item.objective}</p>
-        <p class="muted">Audience: ${item.audience} | Target: ${target}% completion</p>
+        <p class="muted">${t("list.audience")}: ${item.audience} | ${t("list.target")}: ${target}%</p>
       </article>
     `;
-      }
-    )
+    })
     .join("");
 }
 
@@ -796,6 +730,24 @@ function renderIndicators() {
     `
     )
     .join("");
+}
+
+function translateSeverity(severity) {
+  if (severity === "Critical") return t("severity.critical");
+  if (severity === "High") return t("severity.high");
+  if (severity === "Medium") return t("severity.medium");
+  return t("severity.low");
+}
+
+function translateAuditStatus(status) {
+  return t(`auditStatus.${status}`);
+}
+
+function translateTrainingMode(mode) {
+  if (mode === "In-person") return t("training.mode.inperson");
+  if (mode === "Hybrid") return t("training.mode.hybrid");
+  if (mode === "Virtual") return t("training.mode.virtual");
+  return mode;
 }
 
 function severityToBadge(severity) {
@@ -838,6 +790,49 @@ function registerServiceWorker() {
       console.error("Service worker registration failed", error);
     });
   });
+}
+
+function bindEvents() {
+  el.languageSelect?.addEventListener("change", event => {
+    appState.language = event.currentTarget.value === "fr" ? "fr" : "en";
+    persistState();
+    applyI18n();
+    renderAll();
+    updateAuthUi();
+  });
+
+  el.connectionForm.addEventListener("submit", handleConnectionSubmit);
+  el.loginForm.addEventListener("submit", handleLoginSubmit);
+  el.logoutBtn.addEventListener("click", () => logoutLocal(t("toast.signedOut")));
+  el.refreshLiveData.addEventListener("click", () => {
+    refreshLiveData().catch(handleError);
+  });
+  el.downloadCsv.addEventListener("click", () => {
+    downloadReport("csv").catch(handleError);
+  });
+  el.downloadPdf.addEventListener("click", () => {
+    downloadReport("pdf").catch(handleError);
+  });
+
+  el.profileForm.addEventListener("submit", handleProfileSubmit);
+  el.auditForm.addEventListener("submit", handleAuditSubmit);
+  el.trainingForm.addEventListener("submit", handleTrainingSubmit);
+}
+
+function init() {
+  hydrateState();
+  applyI18n();
+  syncConnectionFields();
+  renderAll();
+  updateAuthUi();
+  bindEvents();
+  registerServiceWorker();
+
+  if (appState.auth.token) {
+    refreshLiveData().catch(() => {
+      logoutLocal(t("toast.sessionExpired"));
+    });
+  }
 }
 
 init();
