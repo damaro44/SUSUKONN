@@ -91,6 +91,16 @@ h1 {
   padding: 1rem;
 }
 
+.auth-form {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.small {
+  font-size: 0.84rem;
+}
+
 .hero__panel h2,
 .panel__header h2 {
   margin: 0;
@@ -108,10 +118,20 @@ h1 {
   margin: 0.45rem 0 0;
 }
 
+.small {
+  font-size: 0.83rem;
+}
+
 .quick-actions {
   margin-top: 0.9rem;
   display: flex;
   flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.auth-form {
+  margin-top: 0.7rem;
+  display: grid;
   gap: 0.55rem;
 }
 

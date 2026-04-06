@@ -1,9 +1,16 @@
-const STORAGE_KEY = "eclair-tech-assistance-v1";
+const STORAGE_KEY = "eclair-tech-assistance-v2";
+const DEFAULT_API_BASE_URL = "http://localhost:4100/v1";
 
 const appState = {
+  apiBaseUrl: DEFAULT_API_BASE_URL,
+  auth: {
+    token: "",
+    user: null
+  },
   profile: null,
   audits: [],
   trainings: [],
+  dashboard: null,
   services: [
     {
       key: "compliance",
@@ -66,6 +73,14 @@ const sectorTags = [
 ];
 
 const el = {
+  connectionForm: document.getElementById("connection-form"),
+  apiBaseUrl: document.getElementById("api-base-url"),
+  loginForm: document.getElementById("login-form"),
+  logoutBtn: document.getElementById("logout-btn"),
+  authStatus: document.getElementById("auth-status"),
+  refreshLiveData: document.getElementById("refresh-live-data"),
+  downloadCsv: document.getElementById("download-csv"),
+  downloadPdf: document.getElementById("download-pdf"),
   kpiGrid: document.getElementById("kpi-grid"),
   serviceCards: document.getElementById("service-cards"),
   actionQueue: document.getElementById("action-queue"),
@@ -78,29 +93,41 @@ const el = {
   readinessScore: document.getElementById("readiness-score"),
   readinessCaption: document.getElementById("readiness-caption"),
   toastRoot: document.getElementById("toast-root"),
-  seedDemo: document.getElementById("seed-demo"),
-  resetData: document.getElementById("reset-data"),
   sectorTags: document.getElementById("sector-tags")
 };
 
 function init() {
   hydrateState();
   renderTags();
+  syncConnectionFields();
   renderAll();
+  updateAuthUi();
   bindEvents();
   registerServiceWorker();
+  if (appState.auth.token) {
+    refreshLiveData().catch(() => {
+      logoutLocal("Session expired. Please sign in again.");
+    });
+  }
 }
 
 function bindEvents() {
+  el.connectionForm.addEventListener("submit", handleConnectionSubmit);
+  el.loginForm.addEventListener("submit", handleLoginSubmit);
+  el.logoutBtn.addEventListener("click", () => logoutLocal("Signed out."));
+  el.refreshLiveData.addEventListener("click", () => {
+    refreshLiveData().catch(handleError);
+  });
+  el.downloadCsv.addEventListener("click", () => {
+    downloadReport("csv").catch(handleError);
+  });
+  el.downloadPdf.addEventListener("click", () => {
+    downloadReport("pdf").catch(handleError);
+  });
+
   el.profileForm.addEventListener("submit", handleProfileSubmit);
   el.auditForm.addEventListener("submit", handleAuditSubmit);
   el.trainingForm.addEventListener("submit", handleTrainingSubmit);
-
-  el.seedDemo.addEventListener("click", seedDemoData);
-  el.resetData.addEventListener("click", () => {
-    localStorage.removeItem(STORAGE_KEY);
-    location.reload();
-  });
 }
 
 function hydrateState() {
@@ -111,6 +138,12 @@ function hydrateState() {
 
   try {
     const parsed = JSON.parse(saved);
+    if (typeof parsed.apiBaseUrl === "string" && parsed.apiBaseUrl.trim()) {
+      appState.apiBaseUrl = parsed.apiBaseUrl;
+    }
+    if (parsed.auth?.token && parsed.auth?.user) {
+      appState.auth = parsed.auth;
+    }
     if (parsed.profile) {
       appState.profile = parsed.profile;
     }
@@ -120,11 +153,14 @@ function hydrateState() {
     if (Array.isArray(parsed.trainings)) {
       appState.trainings = parsed.trainings;
     }
+    if (parsed.dashboard) {
+      appState.dashboard = parsed.dashboard;
+    }
     if (Array.isArray(parsed.services) && parsed.services.length === 6) {
       appState.services = parsed.services;
     }
-  } catch (err) {
-    console.error("Failed to load saved workspace state", err);
+  } catch (error) {
+    console.error("Failed to restore local state", error);
   }
 }
 
@@ -132,12 +168,214 @@ function persistState() {
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
+      apiBaseUrl: appState.apiBaseUrl,
+      auth: appState.auth,
       profile: appState.profile,
       audits: appState.audits,
       trainings: appState.trainings,
+      dashboard: appState.dashboard,
       services: appState.services
     })
   );
+}
+
+function syncConnectionFields() {
+  el.apiBaseUrl.value = appState.apiBaseUrl;
+}
+
+function handleConnectionSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const raw = formData.get("apiBaseUrl")?.toString().trim();
+  if (!raw) {
+    toast("API base URL cannot be empty.", "error");
+    return;
+  }
+
+  appState.apiBaseUrl = raw.replace(/\/+$/, "");
+  persistState();
+  toast("API base URL updated.", "success");
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const email = formData.get("email")?.toString().trim() || "";
+  const password = formData.get("password")?.toString() || "";
+
+  if (!email || !password) {
+    toast("Provide email and password.", "error");
+    return;
+  }
+
+  try {
+    const login = await apiFetch("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password })
+    });
+
+    appState.auth.token = login.data.accessToken;
+    appState.auth.user = login.data.user;
+    persistState();
+    updateAuthUi();
+    event.currentTarget.reset();
+    toast(`Welcome, ${login.data.user.fullName}.`, "success");
+
+    await refreshLiveData();
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+function logoutLocal(message) {
+  appState.auth = { token: "", user: null };
+  appState.dashboard = null;
+  persistState();
+  updateAuthUi();
+  if (message) {
+    toast(message, "success");
+  }
+}
+
+async function refreshLiveData() {
+  ensureAuthed();
+
+  const [dashboardResult, auditsResult, trainingsResult] = await Promise.all([
+    apiFetch("/dashboard"),
+    apiFetch("/compliance/audits"),
+    apiFetch("/training/plans")
+  ]);
+
+  appState.dashboard = dashboardResult.data;
+  appState.audits = auditsResult.data;
+  appState.trainings = trainingsResult.data;
+
+  mapServicesFromLiveData();
+  persistState();
+  renderAll();
+  toast("Live data refreshed.", "success");
+}
+
+function updateAuthUi() {
+  const authed = Boolean(appState.auth.token && appState.auth.user);
+  el.logoutBtn.disabled = !authed;
+  el.refreshLiveData.disabled = !authed;
+  el.downloadCsv.disabled = !authed;
+  el.downloadPdf.disabled = !authed;
+
+  if (!authed) {
+    el.authStatus.textContent = "Not authenticated.";
+    return;
+  }
+
+  el.authStatus.textContent = `Authenticated as ${appState.auth.user.fullName} (${appState.auth.user.role}).`;
+}
+
+function ensureAuthed() {
+  if (!appState.auth.token) {
+    throw new Error("Please sign in to call the live API.");
+  }
+}
+
+async function apiFetch(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (!headers.has("Content-Type") && options.body) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (appState.auth.token) {
+    headers.set("Authorization", `Bearer ${appState.auth.token}`);
+  }
+
+  const response = await fetch(`${appState.apiBaseUrl}${path}`, {
+    ...options,
+    headers
+  });
+
+  if (!response.ok) {
+    let message = `Request failed (${response.status})`;
+    try {
+      const payload = await response.json();
+      message = payload?.error?.message || message;
+    } catch {
+      // ignore parse errors
+    }
+
+    if (response.status === 401) {
+      logoutLocal("Session expired. Please sign in again.");
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+async function downloadReport(format) {
+  ensureAuthed();
+
+  const response = await fetch(`${appState.apiBaseUrl}/reports/compliance?format=${format}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${appState.auth.token}`
+    }
+  });
+
+  if (!response.ok) {
+    let message = `Failed to download ${format.toUpperCase()} report.`;
+    try {
+      const payload = await response.json();
+      message = payload?.error?.message || message;
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(message);
+  }
+
+  const blob = await response.blob();
+  const extension = format === "pdf" ? "pdf" : "csv";
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `eclair-compliance-report.${extension}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+
+  toast(`${format.toUpperCase()} report downloaded.`, "success");
+}
+
+function mapServicesFromLiveData() {
+  const dashboard = appState.dashboard;
+  if (!dashboard) {
+    return;
+  }
+
+  const risk = clamp(Number(dashboard.riskScore || 0), 0, 100);
+  const readiness = clamp(Number(dashboard.readinessScore || 0), 0, 100);
+
+  appState.services = appState.services.map(service => {
+    if (service.key === "compliance") {
+      return {
+        ...service,
+        risk,
+        progress: clamp(readiness - 8, 5, 99)
+      };
+    }
+    if (service.key === "training") {
+      return {
+        ...service,
+        risk: clamp(100 - readiness, 10, 90),
+        progress: clamp(readiness - 2, 5, 99)
+      };
+    }
+
+    return {
+      ...service,
+      risk: clamp(Math.round((service.risk + risk) / 2), 10, 95),
+      progress: clamp(Math.round((service.progress + readiness) / 2), 5, 99)
+    };
+  });
 }
 
 function handleProfileSubmit(event) {
@@ -157,106 +395,61 @@ function handleProfileSubmit(event) {
   tuneServiceModelFromProfile();
   persistState();
   renderAll();
-  toast("Institution profile updated.");
+  toast("Institution profile saved locally.", "success");
 }
 
-function handleAuditSubmit(event) {
+async function handleAuditSubmit(event) {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  ensureAuthed();
 
-  appState.audits.unshift({
-    id: crypto.randomUUID(),
+  const form = new FormData(event.currentTarget);
+  const payload = {
     standard: form.get("standard")?.toString().trim(),
     severity: form.get("severity")?.toString(),
     owner: form.get("owner")?.toString().trim(),
     dueDate: form.get("dueDate")?.toString(),
-    finding: form.get("finding")?.toString().trim(),
-    status: "Open"
-  });
+    finding: form.get("finding")?.toString().trim()
+  };
 
-  adjustRiskFromAudit();
-  persistState();
-  renderAll();
-  event.currentTarget.reset();
-  toast("Audit finding logged.");
+  try {
+    await apiFetch("/compliance/audits", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+
+    event.currentTarget.reset();
+    toast("Audit finding created in live backend.", "success");
+    await refreshLiveData();
+  } catch (error) {
+    handleError(error);
+  }
 }
 
-function handleTrainingSubmit(event) {
+async function handleTrainingSubmit(event) {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  ensureAuthed();
 
-  appState.trainings.unshift({
-    id: crypto.randomUUID(),
+  const form = new FormData(event.currentTarget);
+  const payload = {
     program: form.get("program")?.toString().trim(),
     audience: form.get("audience")?.toString().trim(),
     mode: form.get("mode")?.toString(),
-    target: Number(form.get("target")),
-    objective: form.get("objective")?.toString().trim(),
-    completion: 0
-  });
-
-  boostReadinessFromTraining();
-  persistState();
-  renderAll();
-  event.currentTarget.reset();
-  toast("Training initiative added.");
-}
-
-function seedDemoData() {
-  appState.profile = {
-    institutionName: "Ministry of Digital Governance",
-    institutionType: "Ministry",
-    region: "Rwanda",
-    digitalMaturity: 3,
-    paraePreparedness: 2,
-    budget: 900000,
-    objectives:
-      "Accelerate citizen e-services, reduce approval cycle time by 40%, and strengthen policy compliance evidence trails."
+    targetCompletion: Number(form.get("target")),
+    objective: form.get("objective")?.toString().trim()
   };
 
-  appState.audits = [
-    {
-      id: crypto.randomUUID(),
-      standard: "PARAE Control P-07",
-      severity: "High",
-      owner: "Internal Audit Unit",
-      dueDate: "2026-06-15",
-      finding: "No centralized evidence repository for AI-assisted decisions.",
-      status: "Open"
-    },
-    {
-      id: crypto.randomUUID(),
-      standard: "National Digital Standard NDS-12",
-      severity: "Medium",
-      owner: "ICT Directorate",
-      dueDate: "2026-07-01",
-      finding: "Inconsistent SLA monitoring across service portals.",
-      status: "Open"
-    }
-  ];
+  try {
+    await apiFetch("/training/plans", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
 
-  appState.trainings = [
-    {
-      id: crypto.randomUUID(),
-      program: "Responsible AI Operations",
-      audience: "Policy, ICT, and service delivery teams",
-      mode: "Hybrid",
-      target: 90,
-      objective: "Enable compliant AI decision support workflows in 4 departments.",
-      completion: 35
-    }
-  ];
-
-  appState.services = appState.services.map((service, index) => ({
-    ...service,
-    progress: 30 + index * 7,
-    risk: 68 - index * 5
-  }));
-
-  persistState();
-  renderAll();
-  syncProfileForm();
-  toast("Demo scenario loaded.");
+    event.currentTarget.reset();
+    toast("Training plan created in live backend.", "success");
+    await refreshLiveData();
+  } catch (error) {
+    handleError(error);
+  }
 }
 
 function tuneServiceModelFromProfile() {
@@ -277,49 +470,13 @@ function tuneServiceModelFromProfile() {
       progress: clamp(Math.round(progressBase + service.progress * 0.25), 5, 90)
     };
   });
-
-  syncProfileForm();
-}
-
-function adjustRiskFromAudit() {
-  const severityWeight = {
-    Critical: 7,
-    High: 5,
-    Medium: 3,
-    Low: 1
-  };
-
-  const openRisk = appState.audits.reduce((score, audit) => {
-    return score + (severityWeight[audit.severity] || 0);
-  }, 0);
-
-  appState.services = appState.services.map(service => {
-    if (service.key === "compliance" || service.key === "cyber") {
-      return {
-        ...service,
-        risk: clamp(service.risk + openRisk * 0.15, 20, 97),
-        progress: clamp(service.progress - openRisk * 0.08, 5, 95)
-      };
-    }
-    return service;
-  });
-}
-
-function boostReadinessFromTraining() {
-  const leverage = Math.min(appState.trainings.length * 2, 10);
-  appState.services = appState.services.map(service => {
-    if (service.key === "training" || service.key === "change") {
-      return {
-        ...service,
-        progress: clamp(service.progress + leverage, 5, 98),
-        risk: clamp(service.risk - leverage * 0.8, 10, 95)
-      };
-    }
-    return service;
-  });
 }
 
 function computeReadiness() {
+  if (appState.dashboard?.readinessScore) {
+    return clamp(Number(appState.dashboard.readinessScore), 5, 98);
+  }
+
   const base = appState.profile
     ? appState.profile.digitalMaturity * 9 + appState.profile.paraePreparedness * 11
     : 15;
@@ -346,8 +503,14 @@ function buildKpis() {
   return [
     { label: "Readiness Score", value: `${readiness}%` },
     { label: "Average Service Progress", value: `${avgProgress}%` },
-    { label: "Governance Risk Index", value: `${avgRisk}/100` },
-    { label: "Open Audit Findings", value: String(appState.audits.length) }
+    {
+      label: "Governance Risk Index",
+      value: appState.dashboard ? `${appState.dashboard.riskScore}/100` : `${avgRisk}/100`
+    },
+    {
+      label: "Open Audit Findings",
+      value: appState.dashboard ? String(appState.dashboard.openAuditFindings) : String(appState.audits.length)
+    }
   ];
 }
 
@@ -356,8 +519,10 @@ function buildIndicators() {
   const openHigh = appState.audits.filter(item => item.severity === "High").length;
   const trainingCoverage = appState.trainings.length
     ? Math.round(
-        appState.trainings.reduce((sum, training) => sum + training.target, 0) /
-          appState.trainings.length
+        appState.trainings.reduce(
+          (sum, training) => sum + (training.targetCompletion ?? training.target ?? 0),
+          0
+        ) / appState.trainings.length
       )
     : 0;
 
@@ -481,7 +646,7 @@ function renderActionQueue() {
 
 function renderAudits() {
   if (!appState.audits.length) {
-    el.auditList.innerHTML = `<p class="muted">No findings logged yet.</p>`;
+    el.auditList.innerHTML = `<p class="muted">No findings available.</p>`;
     return;
   }
 
@@ -503,22 +668,25 @@ function renderAudits() {
 
 function renderTrainings() {
   if (!appState.trainings.length) {
-    el.trainingList.innerHTML = `<p class="muted">No training plans yet.</p>`;
+    el.trainingList.innerHTML = `<p class="muted">No training plans available.</p>`;
     return;
   }
 
   el.trainingList.innerHTML = appState.trainings
     .map(
-      item => `
+      item => {
+        const target = item.targetCompletion ?? item.target;
+        return `
       <article class="list-item">
         <div class="item-head">
           <strong>${item.program}</strong>
           <span class="badge badge--low">${item.mode}</span>
         </div>
         <p>${item.objective}</p>
-        <p class="muted">Audience: ${item.audience} | Target: ${item.target}% completion</p>
+        <p class="muted">Audience: ${item.audience} | Target: ${target}% completion</p>
       </article>
-    `
+    `;
+      }
     )
     .join("");
 }
@@ -537,19 +705,6 @@ function renderIndicators() {
     .join("");
 }
 
-function syncProfileForm() {
-  if (!appState.profile) {
-    return;
-  }
-
-  Object.entries(appState.profile).forEach(([key, value]) => {
-    const input = el.profileForm.elements.namedItem(key);
-    if (input) {
-      input.value = value;
-    }
-  });
-}
-
 function severityToBadge(severity) {
   if (severity === "Critical" || severity === "High") {
     return "badge--high";
@@ -564,15 +719,20 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function toast(message) {
+function toast(message, level = "info") {
   const notice = document.createElement("div");
-  notice.className = "toast";
+  notice.className = `toast toast--${level}`;
   notice.textContent = message;
   el.toastRoot.appendChild(notice);
 
   window.setTimeout(() => {
     notice.remove();
-  }, 2600);
+  }, 3200);
+}
+
+function handleError(error) {
+  const message = error instanceof Error ? error.message : "Unexpected error";
+  toast(message, "error");
 }
 
 function registerServiceWorker() {

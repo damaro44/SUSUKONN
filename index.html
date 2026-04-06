@@ -32,14 +32,64 @@
         </div>
 
         <aside class="hero__panel">
-          <h2>Implementation Readiness</h2>
-          <div class="score" id="readiness-score">0%</div>
-          <p class="muted" id="readiness-caption">
-            Add baseline data to generate your readiness trajectory.
+          <h2>Secure Backend Access</h2>
+          <p class="muted">
+            Authenticate to the live Eclair API for protected operations and
+            report exports.
           </p>
+          <form id="connection-form" class="auth-form">
+            <label>
+              API Base URL
+              <input
+                id="api-base-url"
+                name="apiBaseUrl"
+                placeholder="http://localhost:4100/v1"
+              />
+            </label>
+            <button class="btn btn--secondary" type="submit">Save API URL</button>
+          </form>
+          <form id="login-form" class="auth-form">
+            <label>
+              Work Email
+              <input
+                type="email"
+                name="email"
+                placeholder="admin@eclair.tech"
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                name="password"
+                placeholder="********"
+                required
+              />
+            </label>
+            <button class="btn btn--primary" type="submit">Sign in</button>
+            <button
+              class="btn btn--secondary"
+              type="button"
+              id="logout-btn"
+              disabled
+            >
+              Sign out
+            </button>
+          </form>
+          <p class="muted small" id="auth-status">Not authenticated.</p>
           <div class="quick-actions">
-            <button class="btn btn--primary" id="seed-demo">Load demo scenario</button>
-            <button class="btn btn--secondary" id="reset-data">Reset workspace</button>
+            <button class="btn btn--secondary" id="refresh-live-data">
+              Refresh live data
+            </button>
+          </div>
+          <div class="quick-actions">
+            <button class="btn btn--secondary" id="download-csv" disabled>
+              Download CSV report
+            </button>
+            <button class="btn btn--secondary" id="download-pdf" disabled>
+              Download PDF report
+            </button>
           </div>
         </aside>
       </div>
