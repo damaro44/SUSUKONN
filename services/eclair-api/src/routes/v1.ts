@@ -7,6 +7,12 @@ import { buildComplianceCsv } from "../utils/csv.js";
 import { buildCompliancePdfBuffer } from "../utils/pdf.js";
 
 export const v1Router = Router();
+function pathParam(value: string | string[] | undefined): string {
+  if (!value) {
+    return "";
+  }
+  return Array.isArray(value) ? value[0] : value;
+}
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -114,7 +120,7 @@ v1Router.patch(
   requireRole(["super_admin", "compliance_officer"]),
   (request, response) => {
     const payload = updateAuditStatusSchema.parse(request.body);
-    const data = eclairService.updateAuditStatus(request.params.auditId, payload.status);
+    const data = eclairService.updateAuditStatus(pathParam(request.params.auditId), payload.status);
     response.json({ data });
   }
 );

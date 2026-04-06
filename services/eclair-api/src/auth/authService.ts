@@ -25,7 +25,7 @@ export function signAccessToken(user: JwtUser): string {
   };
 
   return jwt.sign(payload, env.ECLAIR_JWT_SECRET, {
-    expiresIn: env.ECLAIR_TOKEN_TTL,
+    expiresIn: env.ECLAIR_TOKEN_TTL as jwt.SignOptions["expiresIn"],
     audience: "eclair-api",
     issuer: "eclair-tech-assistance"
   });

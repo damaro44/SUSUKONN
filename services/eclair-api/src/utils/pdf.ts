@@ -20,7 +20,8 @@ export function buildCompliancePdfBuffer(
     doc.fontSize(10).text(`Generated at: ${generatedAt}`);
 
     doc.moveDown(1);
-    doc.fontSize(12).text("Compliance Audit Findings", { bold: true });
+    doc.font("Helvetica-Bold").fontSize(12).text("Compliance Audit Findings");
+    doc.font("Helvetica");
     doc.moveDown(0.35);
 
     if (!audits.length) {
@@ -37,7 +38,8 @@ export function buildCompliancePdfBuffer(
     }
 
     doc.moveDown(0.8);
-    doc.fontSize(12).text("Training & Change Management", { bold: true });
+    doc.font("Helvetica-Bold").fontSize(12).text("Training & Change Management");
+    doc.font("Helvetica");
     doc.moveDown(0.35);
 
     if (!trainings.length) {
