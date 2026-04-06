@@ -1,5 +1,5 @@
 import { StatusBar } from "expo-status-bar";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Platform,
@@ -12,6 +12,8 @@ import {
   View
 } from "react-native";
 import * as Linking from "expo-linking";
+import * as SecureStore from "expo-secure-store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   API_BASE_URL,
   apiCall,
@@ -34,6 +36,9 @@ const ROLE_PERMISSIONS: Record<EclairRole, Permission[]> = {
   auditor: ["refresh", "downloadReports"],
   training_manager: ["refresh", "createTraining"]
 };
+
+const SESSION_STORAGE_KEY = "eclair-mobile-session";
+const LANGUAGE_STORAGE_KEY = "eclair-mobile-language";
 
 const I18N = {
   en: {
@@ -135,6 +140,7 @@ export default function App() {
   const [language, setLanguage] = useState<Language>("en");
   const [apiBaseUrl, setApiBaseUrl] = useState(API_BASE_URL);
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const [email, setEmail] = useState("admin@eclair.tech");
@@ -329,6 +335,61 @@ export default function App() {
     return t.reports;
   };
 
+  useEffect(() => {
+    hydratePersistedState().catch(error => {
+      console.error("Failed to hydrate persisted state", error);
+      setReady(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    persistLanguage(language).catch(error => {
+      console.error("Failed to persist language", error);
+    });
+  }, [language]);
+
+  useEffect(() => {
+    persistSession(session).catch(error => {
+      console.error("Failed to persist session", error);
+    });
+  }, [session]);
+
+  const hydratePersistedState = async () => {
+    const [storedLanguage, storedSessionRaw] = await Promise.all([
+      AsyncStorage.getItem(LANGUAGE_STORAGE_KEY),
+      SecureStore.getItemAsync(SESSION_STORAGE_KEY)
+    ]);
+
+    if (storedLanguage === "en" || storedLanguage === "fr") {
+      setLanguage(storedLanguage);
+    }
+
+    if (storedSessionRaw) {
+      try {
+        const parsed = JSON.parse(storedSessionRaw) as AuthSession;
+        if (parsed?.token && parsed?.user) {
+          setSession(parsed);
+          await refreshAllWith(parsed);
+        }
+      } catch (error) {
+        console.error("Invalid persisted session payload", error);
+      }
+    }
+
+    setReady(true);
+  };
+
+  if (!ready) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style="light" />
+        <View style={[styles.container, { justifyContent: "center", flex: 1 }]}>
+          <Text style={styles.subtitle}>Loading secure session...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
@@ -455,6 +516,18 @@ export default function App() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+async function persistLanguage(language: Language) {
+  await AsyncStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+}
+
+async function persistSession(session: AuthSession | null) {
+  if (!session) {
+    await SecureStore.deleteItemAsync(SESSION_STORAGE_KEY);
+    return;
+  }
+  await SecureStore.setItemAsync(SESSION_STORAGE_KEY, JSON.stringify(session));
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {

@@ -3,15 +3,19 @@
     "name": "Eclair Technology Assistance",
     "slug": "eclair-technology-assistance",
     "version": "1.0.0",
+    "scheme": "eclairassist",
+    "owner": "eclair-technology-assistance",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.eclair.assistance"
     },
     "android": {
+      "package": "com.eclair.assistance",
       "adaptiveIcon": {
         "backgroundColor": "#0C3C64"
       }
