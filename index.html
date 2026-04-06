@@ -4,53 +4,214 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SusuKonnect | Collective Savings Fintech MVP</title>
+    <title>Eclair Technology Assistance | AI Government Digitalization & Compliance</title>
     <meta
       name="description"
-      content="SusuKonnect digitizes trusted community savings circles with transparent contributions, secure payouts, and compliant fintech controls."
+      content="Eclair Technology Assistance delivers AI-powered government digitalization, PARAE-aligned compliance audits, workflow automation, cybersecurity governance, change management, and public-sector training."
     />
-    <meta name="theme-color" content="#0c3c64" />
+    <meta name="theme-color" content="#03133a" />
     <link rel="manifest" href="manifest.json" />
     <link rel="icon" href="assets/susukonnect-mark.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div id="app">
-      <header class="brand-header">
-        <img
-          src="assets/susukonnect-logo.svg"
-          alt="SusuKonnect logo with tagline"
-          class="brand-logo"
-        />
-      </header>
-
-      <main class="app-main" id="app-main">
-        <noscript>
-          <p class="noscript-warning">
-            SusuKonnect requires JavaScript to load secure onboarding and
-            savings workflows.
+    <header class="hero">
+      <div class="hero__inner">
+        <div class="hero__branding">
+          <p class="eyebrow">Eclair Technology Assistance</p>
+          <h1>
+            AI-powered digitalization and compliance operations for governments and
+            regulated institutions
+          </h1>
+          <p class="hero__summary">
+            Plan, execute, and monitor compliance audits, process automation,
+            AI workflow deployment, cybersecurity governance, change management,
+            and PARAE-aligned capacity building in one efficient platform.
           </p>
-        </noscript>
-      </main>
-    </div>
+          <div class="hero__tags" id="sector-tags"></div>
+        </div>
 
-    <div id="mfa-modal" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal-panel">
-        <h2>MFA Verification Required</h2>
-        <p id="mfa-purpose"></p>
-        <p class="demo-code" id="mfa-code"></p>
-        <form id="mfa-form">
-          <label for="mfa-input">Enter 6-digit verification code</label>
-          <input id="mfa-input" name="code" minlength="6" maxlength="6" required />
-          <div class="modal-actions">
-            <button type="submit" class="btn-primary">Confirm</button>
-            <button type="button" id="mfa-cancel" class="btn-secondary">Cancel</button>
+        <aside class="hero__panel">
+          <h2>Implementation Readiness</h2>
+          <div class="score" id="readiness-score">0%</div>
+          <p class="muted" id="readiness-caption">
+            Add baseline data to generate your readiness trajectory.
+          </p>
+          <div class="quick-actions">
+            <button class="btn btn--primary" id="seed-demo">Load demo scenario</button>
+            <button class="btn btn--secondary" id="reset-data">Reset workspace</button>
           </div>
-        </form>
+        </aside>
       </div>
-    </div>
+    </header>
 
-    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+    <main class="container" id="app-main">
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Program Overview</h2>
+          <p class="muted">Cross-service KPIs aligned to national digital standards and PARAE priorities.</p>
+        </div>
+        <div class="kpi-grid" id="kpi-grid"></div>
+      </section>
+
+      <section class="panel panel--stacked">
+        <div class="panel__header">
+          <h2>Institution Profile</h2>
+          <p class="muted">Baseline context used by the AI planning engine.</p>
+        </div>
+        <form id="profile-form" class="form-grid">
+          <label>
+            Institution Name
+            <input name="institutionName" required placeholder="e.g. Ministry of Public Service" />
+          </label>
+          <label>
+            Institution Type
+            <select name="institutionType" required>
+              <option value="">Select...</option>
+              <option>Government Agency</option>
+              <option>Ministry</option>
+              <option>Public Institution</option>
+              <option>Regulated Private Organization</option>
+            </select>
+          </label>
+          <label>
+            Country / Region
+            <input name="region" required placeholder="e.g. Rwanda" />
+          </label>
+          <label>
+            Digital Maturity (1-5)
+            <input name="digitalMaturity" type="number" min="1" max="5" required />
+          </label>
+          <label>
+            PARAE Preparedness (1-5)
+            <input name="paraePreparedness" type="number" min="1" max="5" required />
+          </label>
+          <label>
+            Annual Compliance Budget (USD)
+            <input name="budget" type="number" min="0" step="1000" required />
+          </label>
+          <label class="full">
+            Strategic Objectives
+            <textarea
+              name="objectives"
+              rows="3"
+              placeholder="Summarize desired outcomes: service digitization, response time reduction, audit readiness, etc."
+              required
+            ></textarea>
+          </label>
+          <button type="submit" class="btn btn--primary">Save profile</button>
+        </form>
+      </section>
+
+      <div class="split-grid">
+        <section class="panel">
+          <div class="panel__header">
+            <h2>Service Planner</h2>
+            <p class="muted">Track all six Eclair service lines in one view.</p>
+          </div>
+          <div id="service-cards" class="service-cards"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__header">
+            <h2>AI Prioritized Action Queue</h2>
+            <p class="muted">Generated from risk, impact, and readiness signals.</p>
+          </div>
+          <ol id="action-queue" class="action-queue"></ol>
+        </section>
+      </div>
+
+      <div class="split-grid">
+        <section class="panel panel--stacked">
+          <div class="panel__header">
+            <h2>Compliance Audit Tracker</h2>
+            <p class="muted">Register findings and assign mitigation owners.</p>
+          </div>
+          <form id="audit-form" class="form-grid compact">
+            <label>
+              Standard / Requirement
+              <input name="standard" required placeholder="PARAE Section / National Standard" />
+            </label>
+            <label>
+              Severity
+              <select name="severity" required>
+                <option>Critical</option>
+                <option>High</option>
+                <option>Medium</option>
+                <option>Low</option>
+              </select>
+            </label>
+            <label>
+              Responsible Unit
+              <input name="owner" required placeholder="e.g. ICT Directorate" />
+            </label>
+            <label>
+              Due Date
+              <input name="dueDate" type="date" required />
+            </label>
+            <label class="full">
+              Finding
+              <textarea name="finding" rows="2" required></textarea>
+            </label>
+            <button type="submit" class="btn btn--primary">Add audit item</button>
+          </form>
+          <div id="audit-list" class="list"></div>
+        </section>
+
+        <section class="panel panel--stacked">
+          <div class="panel__header">
+            <h2>Training & Change Management</h2>
+            <p class="muted">Plan PARAE-aligned staff upskilling and adoption campaigns.</p>
+          </div>
+          <form id="training-form" class="form-grid compact">
+            <label>
+              Program Name
+              <input name="program" required placeholder="e.g. Responsible AI for Public Services" />
+            </label>
+            <label>
+              Target Group
+              <input name="audience" required placeholder="e.g. 120 case officers" />
+            </label>
+            <label>
+              Delivery Mode
+              <select name="mode" required>
+                <option>In-person</option>
+                <option>Hybrid</option>
+                <option>Virtual</option>
+              </select>
+            </label>
+            <label>
+              Completion Target (%)
+              <input name="target" type="number" min="1" max="100" required />
+            </label>
+            <label class="full">
+              Adoption Objective
+              <textarea name="objective" rows="2" required></textarea>
+            </label>
+            <button type="submit" class="btn btn--primary">Add training plan</button>
+          </form>
+          <div id="training-list" class="list"></div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Cybersecurity Governance & Workflow Automation Indicators</h2>
+          <p class="muted">Control posture and automation outcomes for executives.</p>
+        </div>
+        <div class="indicator-grid" id="indicator-grid"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>
+        Eclair Technology Assistance - Trusted partner for AI digital transformation,
+        compliance execution, and institutional capacity development.
+      </p>
+    </footer>
+
+    <div id="toast-root" aria-live="polite" class="toast-root"></div>
+
     <script type="module" src="app.js"></script>
   </body>
 </html>
