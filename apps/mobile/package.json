@@ -17,6 +17,7 @@
   "dependencies": {
     "@susukonnect/shared": "*",
     "expo": "latest",
+    "expo-linking": "^55.0.11",
     "expo-status-bar": "latest",
     "react": "latest",
     "react-native": "latest",

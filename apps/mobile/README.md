@@ -1,35 +1,42 @@
-# SusuKonnect React Native App (Expo)
+# Eclair Technology Assistance Mobile MVP (Expo)
 
-Mobile frontend for SusuKonnect MVP production architecture.
+Single-codebase mobile/web app for **iOS, Android, and Web**.
 
-## What it covers
+## Core features implemented
 
-- Secure login + registration
-- MFA challenge handling for sensitive actions
-- Role-aware tabs (member/leader/admin)
-- Dashboard
-- Groups (create, join, select)
-- Contributions (pay)
-- Payout workflow (request, approve, confirm, release)
-- Group chat
-- Calendar events
-- Notification center
-- Security controls (KYC, auth preferences, payment methods)
-- Admin compliance panel (overview + KYC review)
+- Live authentication with Eclair API (`/auth/login`)
+- Role-based permissions (frontend RBAC)
+- Role capabilities panel (allowed vs restricted actions)
+- Dashboard (readiness/risk/open findings/training programs)
+- Compliance audit creation + list
+- Training plan creation + list
+- Report export triggers (CSV/PDF)
+- Bilingual UI (English/French)
 
-## Configure backend URL
+## Environment
 
-Set Expo public env:
+Use the Eclair API URL as Expo public env:
 
 ```bash
-EXPO_PUBLIC_API_BASE_URL=http://localhost:4000/v1
+EXPO_PUBLIC_API_BASE_URL=http://localhost:4100/v1
 ```
 
-## Run
+## Run (all platforms)
 
 ```bash
 npm install
 npm run start --workspace @susukonnect/mobile
 ```
 
-Then launch on iOS/Android simulator via Expo.
+Then choose:
+
+- `w` for Web
+- `i` for iOS simulator
+- `a` for Android emulator
+
+## Demo credentials
+
+- `admin@eclair.tech` / `Admin@2026`
+- `compliance@eclair.tech` / `Compliance@2026`
+- `auditor@eclair.tech` / `Auditor@2026`
+- `training@eclair.tech` / `Training@2026`
