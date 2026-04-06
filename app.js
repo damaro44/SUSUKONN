@@ -12,6 +12,7 @@ const ROLE_PERMISSIONS = {
 
 const appState = {
   language: "en",
+  languageManualOverride: false,
   apiBaseUrl: DEFAULT_API_BASE_URL,
   auth: {
     token: "",
@@ -141,12 +142,18 @@ function renderTags() {
 
 function hydrateState() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return;
+  if (!saved) {
+    autoDetectLanguageOnFirstLoad();
+    return;
+  }
 
   try {
     const parsed = JSON.parse(saved);
     if (parsed.language === "fr" || parsed.language === "en") {
       appState.language = parsed.language;
+    }
+    if (typeof parsed.languageManualOverride === "boolean") {
+      appState.languageManualOverride = parsed.languageManualOverride;
     }
     if (typeof parsed.apiBaseUrl === "string" && parsed.apiBaseUrl.trim()) {
       appState.apiBaseUrl = parsed.apiBaseUrl;
@@ -171,6 +178,7 @@ function persistState() {
     STORAGE_KEY,
     JSON.stringify({
       language: appState.language,
+      languageManualOverride: appState.languageManualOverride,
       apiBaseUrl: appState.apiBaseUrl,
       auth: appState.auth,
       profile: appState.profile,
@@ -795,6 +803,7 @@ function registerServiceWorker() {
 function bindEvents() {
   el.languageSelect?.addEventListener("change", event => {
     appState.language = event.currentTarget.value === "fr" ? "fr" : "en";
+    appState.languageManualOverride = true;
     persistState();
     applyI18n();
     renderAll();
@@ -832,6 +841,15 @@ function init() {
     refreshLiveData().catch(() => {
       logoutLocal(t("toast.sessionExpired"));
     });
+  }
+}
+
+function autoDetectLanguageOnFirstLoad() {
+  const browserLanguage = navigator.language?.toLowerCase() || "";
+  if (browserLanguage.startsWith("fr")) {
+    appState.language = "fr";
+  } else {
+    appState.language = "en";
   }
 }
 
