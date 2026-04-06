@@ -17,6 +17,7 @@ SusuKonnect now includes a split production-oriented architecture while preservi
 
 - **React Native frontend** (`apps/mobile`)
 - **Node backend implementation** (`services/api-node`)
+- **Eclair production backend API** (`services/eclair-api`)
 - **Laravel parity backend implementation** (`services/api-laravel`)
 - **Shared domain contracts/types** (`packages/shared`)
 - **OpenAPI contract** (`docs/openapi/susukonnect-v1.yaml`)
@@ -34,6 +35,7 @@ apps/
   mobile/                # Expo React Native client
 services/
   api-node/              # Primary backend implementation (TypeScript/Express)
+  eclair-api/            # Eclair backend (JWT, RBAC, compliance reports)
   api-laravel/           # Laravel parity controllers/services/policies/tests
 packages/
   shared/                # Shared types/constants/domain models
@@ -92,6 +94,26 @@ npm run dev:api
 ```bash
 EXPO_PUBLIC_API_BASE_URL=http://localhost:4000/v1 npm run dev:mobile
 ```
+
+### 4) Start Eclair production backend API
+
+```bash
+cp services/eclair-api/.env.example services/eclair-api/.env
+npm run dev:eclair-api
+```
+
+Eclair API base URL: `http://localhost:4100/v1`
+
+## Eclair API Features
+
+- JWT authentication (`/v1/auth/login`, `/v1/auth/me`)
+- Role-based access control for operational actions
+- Compliance audit tracker endpoints
+- Training & change management endpoints
+- Dashboard summary endpoint
+- Exportable compliance reports:
+  - CSV: `/v1/reports/compliance?format=csv`
+  - PDF: `/v1/reports/compliance?format=pdf`
 
 ## Demo Credentials
 
