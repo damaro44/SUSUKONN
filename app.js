@@ -1,5 +1,11 @@
 const STORAGE_KEY = "eclair-tech-assistance-v2";
 const DEFAULT_API_BASE_URL = "http://localhost:4100/v1";
+const ROLE_PERMISSIONS = {
+  super_admin: ["refresh", "createAudit", "createTraining", "downloadReports"],
+  compliance_officer: ["refresh", "createAudit", "createTraining", "downloadReports"],
+  auditor: ["refresh", "downloadReports"],
+  training_manager: ["refresh", "createTraining"]
+};
 
 const appState = {
   apiBaseUrl: DEFAULT_API_BASE_URL,
@@ -81,6 +87,8 @@ const el = {
   refreshLiveData: document.getElementById("refresh-live-data"),
   downloadCsv: document.getElementById("download-csv"),
   downloadPdf: document.getElementById("download-pdf"),
+  reportActions: document.getElementById("report-actions"),
+  reportRbacNote: document.getElementById("report-rbac-note"),
   kpiGrid: document.getElementById("kpi-grid"),
   serviceCards: document.getElementById("service-cards"),
   actionQueue: document.getElementById("action-queue"),
@@ -90,6 +98,8 @@ const el = {
   profileForm: document.getElementById("profile-form"),
   auditForm: document.getElementById("audit-form"),
   trainingForm: document.getElementById("training-form"),
+  auditRbacNote: document.getElementById("audit-rbac-note"),
+  trainingRbacNote: document.getElementById("training-rbac-note"),
   readinessScore: document.getElementById("readiness-score"),
   readinessCaption: document.getElementById("readiness-caption"),
   toastRoot: document.getElementById("toast-root"),
@@ -259,16 +269,90 @@ async function refreshLiveData() {
 function updateAuthUi() {
   const authed = Boolean(appState.auth.token && appState.auth.user);
   el.logoutBtn.disabled = !authed;
-  el.refreshLiveData.disabled = !authed;
-  el.downloadCsv.disabled = !authed;
-  el.downloadPdf.disabled = !authed;
 
   if (!authed) {
+    el.refreshLiveData.disabled = true;
+    el.downloadCsv.disabled = true;
+    el.downloadPdf.disabled = true;
+    setSectionPermission(
+      el.auditForm,
+      el.auditRbacNote,
+      false,
+      "Sign in to create audit items.",
+      false
+    );
+    setSectionPermission(
+      el.trainingForm,
+      el.trainingRbacNote,
+      false,
+      "Sign in to create training plans.",
+      false
+    );
+    toggleReportPermission(false, "Sign in to export compliance reports.", false);
     el.authStatus.textContent = "Not authenticated.";
     return;
   }
 
+  const canRefresh = hasPermission("refresh");
+  const canDownloadReports = hasPermission("downloadReports");
+  const canCreateAudit = hasPermission("createAudit");
+  const canCreateTraining = hasPermission("createTraining");
+
+  el.refreshLiveData.disabled = !canRefresh;
+  el.downloadCsv.disabled = !canDownloadReports;
+  el.downloadPdf.disabled = !canDownloadReports;
+
+  setSectionPermission(
+    el.auditForm,
+    el.auditRbacNote,
+    canCreateAudit,
+    "Your role can view findings but cannot create audit items."
+  );
+  setSectionPermission(
+    el.trainingForm,
+    el.trainingRbacNote,
+    canCreateTraining,
+    "Your role can view plans but cannot create training records."
+  );
+  toggleReportPermission(
+    canDownloadReports,
+    "Your role does not have permission to export compliance reports."
+  );
+
   el.authStatus.textContent = `Authenticated as ${appState.auth.user.fullName} (${appState.auth.user.role}).`;
+}
+
+function hasPermission(permission) {
+  const role = appState.auth.user?.role;
+  if (!role) {
+    return false;
+  }
+  return ROLE_PERMISSIONS[role]?.includes(permission) || false;
+}
+
+function setSectionPermission(formElement, noteElement, isAllowed, message, showNote = true) {
+  if (!formElement || !noteElement) {
+    return;
+  }
+
+  const inputs = formElement.querySelectorAll("input, select, textarea, button");
+  inputs.forEach(input => {
+    input.disabled = !isAllowed;
+  });
+
+  formElement.classList.toggle("rbac-disabled", !isAllowed);
+  noteElement.textContent = !isAllowed && showNote ? message : "";
+  noteElement.classList.toggle("hidden", isAllowed || !showNote);
+}
+
+function toggleReportPermission(isAllowed, message, showNote = true) {
+  if (!el.reportActions || !el.reportRbacNote) {
+    return;
+  }
+
+  el.reportActions.classList.toggle("hidden", !isAllowed);
+  el.reportRbacNote.textContent = !isAllowed && showNote ? message : "";
+  el.reportRbacNote.classList.toggle("hidden", isAllowed || !showNote);
 }
 
 function ensureAuthed() {
@@ -312,6 +396,9 @@ async function apiFetch(path, options = {}) {
 
 async function downloadReport(format) {
   ensureAuthed();
+  if (!hasPermission("downloadReports")) {
+    throw new Error("Your role is not allowed to download reports.");
+  }
 
   const response = await fetch(`${appState.apiBaseUrl}/reports/compliance?format=${format}`, {
     method: "GET",
@@ -401,6 +488,9 @@ function handleProfileSubmit(event) {
 async function handleAuditSubmit(event) {
   event.preventDefault();
   ensureAuthed();
+  if (!hasPermission("createAudit")) {
+    throw new Error("Your role is not allowed to create audit items.");
+  }
 
   const form = new FormData(event.currentTarget);
   const payload = {
@@ -428,6 +518,9 @@ async function handleAuditSubmit(event) {
 async function handleTrainingSubmit(event) {
   event.preventDefault();
   ensureAuthed();
+  if (!hasPermission("createTraining")) {
+    throw new Error("Your role is not allowed to create training plans.");
+  }
 
   const form = new FormData(event.currentTarget);
   const payload = {

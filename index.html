@@ -79,18 +79,19 @@
           </form>
           <p class="muted small" id="auth-status">Not authenticated.</p>
           <div class="quick-actions">
-            <button class="btn btn--secondary" id="refresh-live-data">
+            <button class="btn btn--secondary" id="refresh-live-data" type="button">
               Refresh live data
             </button>
           </div>
-          <div class="quick-actions">
-            <button class="btn btn--secondary" id="download-csv" disabled>
+          <div class="quick-actions" id="report-actions">
+            <button class="btn btn--secondary" id="download-csv" type="button" disabled>
               Download CSV report
             </button>
-            <button class="btn btn--secondary" id="download-pdf" disabled>
+            <button class="btn btn--secondary" id="download-pdf" type="button" disabled>
               Download PDF report
             </button>
           </div>
+          <p class="muted small hidden" id="report-rbac-note"></p>
         </aside>
       </div>
     </header>
@@ -176,6 +177,7 @@
           <div class="panel__header">
             <h2>Compliance Audit Tracker</h2>
             <p class="muted">Register findings and assign mitigation owners.</p>
+            <p class="muted small hidden" id="audit-rbac-note"></p>
           </div>
           <form id="audit-form" class="form-grid compact">
             <label>
@@ -212,6 +214,7 @@
           <div class="panel__header">
             <h2>Training & Change Management</h2>
             <p class="muted">Plan PARAE-aligned staff upskilling and adoption campaigns.</p>
+            <p class="muted small hidden" id="training-rbac-note"></p>
           </div>
           <form id="training-form" class="form-grid compact">
             <label>

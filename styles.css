@@ -97,8 +97,17 @@ h1 {
   gap: 0.55rem;
 }
 
+.rbac-disabled {
+  opacity: 0.58;
+  pointer-events: none;
+}
+
 .small {
   font-size: 0.84rem;
+}
+
+.hidden {
+  display: none;
 }
 
 .hero__panel h2,
@@ -263,6 +272,11 @@ textarea:focus {
   cursor: pointer;
 }
 
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .btn--primary {
   background: linear-gradient(90deg, var(--brand) 0%, var(--brand-strong) 100%);
   color: white;
@@ -350,6 +364,14 @@ textarea:focus {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.64rem;
+}
+
+.toast--error {
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+.toast--success {
+  border-color: rgba(34, 197, 94, 0.7);
 }
 
 @media (max-width: 960px) {
