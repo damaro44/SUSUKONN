@@ -334,6 +334,48 @@ textarea:focus {
   gap: 0.6rem;
 }
 
+.docops-split {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.docops-meta {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.docops-meta p {
+  margin: 0;
+}
+
+.analytics-grid {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.analytics-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(1, 14, 45, 0.5);
+  padding: 0.7rem;
+}
+
+.analytics-item h3 {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #bcd3f5;
+}
+
+.analytics-item .value {
+  margin-top: 0.35rem;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
 .service-card,
 .list-item {
   padding: 0.72rem;
@@ -418,6 +460,7 @@ textarea:focus {
 @media (max-width: 960px) {
   .hero__inner,
   .split-grid,
+  .docops-split,
   .kpi-grid,
   .indicator-grid,
   .form-grid,

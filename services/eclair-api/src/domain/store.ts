@@ -1,6 +1,65 @@
-import type { ComplianceAuditItem, DocumentRecord, TrainingPlan, UserRecord } from "../types/domain.js";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+  randomUUID
+} from "node:crypto";
+import type {
+  AuditTrailEvent,
+  CollaborationComment,
+  ComplianceAuditItem,
+  Department,
+  DocumentProcessingRecord,
+  DocumentRecord,
+  DocumentVersion,
+  EncryptedPayload,
+  TrainingPlan,
+  UserRecord,
+  WorkflowRun,
+  WorkflowTemplate
+} from "../types/domain.js";
 
 const now = () => new Date().toISOString();
+
+const ENCRYPTION_KEY_VERSION = "v1";
+const ENCRYPTION_KEY = createHash("sha256")
+  .update(process.env.ECLAIR_STORAGE_SECRET || "change-this-storage-secret-before-production")
+  .digest();
+
+export function encryptPlainText(plainText: string): EncryptedPayload {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", ENCRYPTION_KEY, iv);
+  const encrypted = Buffer.concat([cipher.update(plainText, "utf8"), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return {
+    cipherTextBase64: encrypted.toString("base64"),
+    ivBase64: iv.toString("base64"),
+    authTagBase64: authTag.toString("base64"),
+    keyVersion: ENCRYPTION_KEY_VERSION
+  };
+}
+
+export function decryptToPlainText(payload: EncryptedPayload): string {
+  const decipher = createDecipheriv("aes-256-gcm", ENCRYPTION_KEY, Buffer.from(payload.ivBase64, "base64"));
+  decipher.setAuthTag(Buffer.from(payload.authTagBase64, "base64"));
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(payload.cipherTextBase64, "base64")),
+    decipher.final()
+  ]);
+  return decrypted.toString("utf8");
+}
+
+function auditEvent(action: string, actorId: string, documentId?: string, metadata?: AuditTrailEvent["metadata"]): AuditTrailEvent {
+  return {
+    id: randomUUID(),
+    action,
+    actorId,
+    documentId,
+    metadata,
+    createdAt: now()
+  };
+}
 
 export const users: UserRecord[] = [
   {
@@ -75,10 +134,7 @@ export const trainingPlans: TrainingPlan[] = [
   }
 ];
 
-const sampleDoc = Buffer.from(
-  "ETA evidence pack sample content for audits and governance records.",
-  "utf8"
-).toString("base64");
+const sampleDocPayload = encryptPlainText("ETA evidence pack sample content for audits and governance records.");
 
 export const documentRecords: DocumentRecord[] = [
   {
@@ -90,6 +146,62 @@ export const documentRecords: DocumentRecord[] = [
     category: "compliance_evidence",
     uploadedAt: now(),
     uploadedBy: "u-compliance",
-    contentBase64: sampleDoc
+    encryptedPayload: sampleDocPayload
   }
 ];
+
+export const documentProcessingRecords: DocumentProcessingRecord[] = [
+  {
+    id: "proc-1",
+    documentId: "doc-1",
+    extractedText: "ETA evidence pack sample content for audits and governance records.",
+    ocrConfidence: 99.9,
+    routedDepartment: "compliance",
+    routeReason: "Detected compliance and evidence terminology",
+    processedAt: now(),
+    processedBy: "u-compliance"
+  }
+];
+
+export const workflowTemplates: WorkflowTemplate[] = [
+  {
+    id: "wf-template-1",
+    name: "Compliance Evidence Approval",
+    department: "compliance",
+    steps: ["Initial Review", "Manager Approval", "Archive"],
+    createdAt: now(),
+    createdBy: "u-admin"
+  }
+];
+
+export const workflowRuns: WorkflowRun[] = [];
+
+export const collaborationComments: CollaborationComment[] = [];
+
+export const documentVersions: DocumentVersion[] = [
+  {
+    id: "docv-1",
+    documentId: "doc-1",
+    versionNumber: 1,
+    fileName: "eta-sample-evidence.txt",
+    mimeType: "text/plain",
+    sizeBytes: 66,
+    encryptedPayload: sampleDocPayload,
+    createdAt: now(),
+    createdBy: "u-compliance"
+  }
+];
+
+export const auditTrailEvents: AuditTrailEvent[] = [
+  auditEvent("DOCUMENT_UPLOADED", "u-compliance", "doc-1", { category: "compliance_evidence", version: 1 }),
+  auditEvent("OCR_PROCESSED", "u-compliance", "doc-1", { confidence: 99.9, department: "compliance" })
+];
+
+export const departmentRoutingKeywords: Record<Department, string[]> = {
+  compliance: ["compliance", "audit", "parae", "control", "evidence", "regulation", "governance"],
+  legal: ["contract", "law", "legal", "policy", "agreement", "terms"],
+  finance: ["budget", "invoice", "payment", "procurement", "finance", "cost"],
+  it_security: ["security", "cyber", "vulnerability", "access", "encryption", "risk"],
+  hr: ["staff", "employee", "training", "recruitment", "human resources", "personnel"],
+  operations: ["workflow", "operations", "service", "delivery", "process", "ticket"]
+};

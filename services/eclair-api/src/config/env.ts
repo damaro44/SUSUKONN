@@ -7,7 +7,8 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().default(4100),
   ECLAIR_JWT_SECRET: z.string().min(16).default("change-this-secret-before-production"),
-  ECLAIR_TOKEN_TTL: z.string().default("8h")
+  ECLAIR_TOKEN_TTL: z.string().default("8h"),
+  ECLAIR_STORAGE_SECRET: z.string().min(16).default("change-this-storage-secret")
 });
 
 const parsed = envSchema.safeParse(process.env);

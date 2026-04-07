@@ -59,6 +59,39 @@ const uploadDocumentSchema = z.object({
   contentBase64: z.string().min(4)
 });
 
+const uploadDocumentVersionSchema = z.object({
+  documentId: z.string().min(1),
+  fileName: z.string().min(1),
+  mimeType: z.string().min(1),
+  contentBase64: z.string().min(4)
+});
+
+const workflowTemplateSchema = z.object({
+  name: z.string().min(2),
+  department: z.enum(["compliance", "legal", "finance", "it_security", "hr", "operations"]),
+  steps: z.array(z.string().min(1)).min(2)
+});
+
+const workflowRunStartSchema = z.object({
+  templateId: z.string().min(1),
+  documentId: z.string().min(1)
+});
+
+const workflowRunAdvanceSchema = z.object({
+  runId: z.string().min(1),
+  action: z.enum(["approve", "reject"]),
+  comment: z.string().max(500).optional()
+});
+
+const workflowRunsQuerySchema = z.object({
+  documentId: z.string().min(1).optional()
+});
+
+const commentSchema = z.object({
+  documentId: z.string().min(1),
+  message: z.string().min(2).max(1000)
+});
+
 function toPublicUser(user: { id: string; fullName: string; email: string; role: string }) {
   return {
     id: user.id,
@@ -193,17 +226,130 @@ v1Router.post("/documents/upload", requireAuth, (request, response) => {
   response.status(201).json({ data });
 });
 
+v1Router.post(
+  "/documents/:documentId/version",
+  requireAuth,
+  requireRole(["super_admin", "compliance_officer", "training_manager"]),
+  (request, response) => {
+    const documentId = pathParam(request.params.documentId);
+    const payload = uploadDocumentVersionSchema.parse({
+      ...request.body,
+      documentId
+    });
+    const data = eclairService.uploadDocumentVersion(payload, request.authUser!.id);
+    response.status(201).json({ data });
+  }
+);
+
+v1Router.post("/documents/version", requireAuth, (request, response) => {
+  const payload = uploadDocumentVersionSchema.parse(request.body);
+  const data = eclairService.uploadDocumentVersion(payload, request.authUser!.id);
+  response.status(201).json({ data });
+});
+
+v1Router.get("/documents/:documentId/versions", requireAuth, (request, response) => {
+  const data = eclairService.listDocumentVersions(pathParam(request.params.documentId));
+  response.json({ data });
+});
+
 v1Router.get("/documents/:documentId/download", requireAuth, (request, response) => {
   const documentId = pathParam(request.params.documentId);
   const document = eclairService.getDocumentForDownload(documentId);
-  const fileBuffer = Buffer.from(document.contentBase64, "base64");
+  const decrypted = eclairService.getDocumentDecryptedContent(documentId);
 
-  response.setHeader("Content-Type", document.mimeType || "application/octet-stream");
+  response.setHeader("Content-Type", decrypted.mimeType || document.mimeType || "application/octet-stream");
   response.setHeader(
     "Content-Disposition",
-    `attachment; filename="${encodeURIComponent(document.fileName || `${document.id}.bin`)}"`
+    `attachment; filename="${encodeURIComponent(decrypted.fileName || document.fileName || `${document.id}.bin`)}"`
   );
-  response.status(200).send(fileBuffer);
+  response.status(200).send(decrypted.data);
+});
+
+v1Router.post("/documents/:documentId/process", requireAuth, (request, response) => {
+  const documentId = pathParam(request.params.documentId);
+  const data = eclairService.processDocumentOcr(documentId, request.authUser!.id);
+  response.status(201).json({ data });
+});
+
+v1Router.get("/documents/processing", requireAuth, (request, response) => {
+  const documentId =
+    typeof request.query.documentId === "string" && request.query.documentId ? request.query.documentId : undefined;
+  const data = eclairService.listDocumentProcessing(documentId);
+  response.json({ data });
+});
+
+v1Router.get("/documents/:documentId/processing", requireAuth, (request, response) => {
+  const documentId = pathParam(request.params.documentId);
+  const data = eclairService.listDocumentProcessing(documentId);
+  response.json({ data });
+});
+
+v1Router.post(
+  "/workflows/templates",
+  requireAuth,
+  requireRole(["super_admin", "compliance_officer", "training_manager"]),
+  (request, response) => {
+    const payload = workflowTemplateSchema.parse(request.body);
+    const data = eclairService.createWorkflowTemplate(payload, request.authUser!.id);
+    response.status(201).json({ data });
+  }
+);
+
+v1Router.get("/workflows/templates", requireAuth, (_request, response) => {
+  response.json({ data: eclairService.listWorkflowTemplates() });
+});
+
+v1Router.post(
+  "/workflows/runs/start",
+  requireAuth,
+  requireRole(["super_admin", "compliance_officer", "training_manager"]),
+  (request, response) => {
+    const payload = workflowRunStartSchema.parse(request.body);
+    const data = eclairService.startWorkflowRun(payload, request.authUser!.id);
+    response.status(201).json({ data });
+  }
+);
+
+v1Router.post(
+  "/workflows/runs/advance",
+  requireAuth,
+  requireRole(["super_admin", "compliance_officer", "training_manager", "auditor"]),
+  (request, response) => {
+    const payload = workflowRunAdvanceSchema.parse(request.body);
+    const data = eclairService.advanceWorkflowRun(payload, request.authUser!.id);
+    response.json({ data });
+  }
+);
+
+v1Router.get("/workflows/runs", requireAuth, (request, response) => {
+  const payload = workflowRunsQuerySchema.parse({
+    documentId: typeof request.query.documentId === "string" ? request.query.documentId : undefined
+  });
+  const data = eclairService.listWorkflowRuns(payload.documentId);
+  response.json({ data });
+});
+
+v1Router.post("/collaboration/comments", requireAuth, (request, response) => {
+  const payload = commentSchema.parse(request.body);
+  const data = eclairService.addDocumentComment(payload, request.authUser!.id);
+  response.status(201).json({ data });
+});
+
+v1Router.get("/collaboration/comments/:documentId", requireAuth, (request, response) => {
+  const data = eclairService.listDocumentComments(pathParam(request.params.documentId));
+  response.json({ data });
+});
+
+v1Router.get("/collaboration/audit-trail", requireAuth, (request, response) => {
+  const payload = workflowRunsQuerySchema.parse({
+    documentId: typeof request.query.documentId === "string" ? request.query.documentId : undefined
+  });
+  const data = eclairService.listAuditTrail(payload.documentId);
+  response.json({ data });
+});
+
+v1Router.get("/analytics/documents", requireAuth, (request, response) => {
+  response.json({ data: eclairService.documentOpsAnalytics() });
 });
 
 v1Router.get(

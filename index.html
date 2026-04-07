@@ -402,6 +402,173 @@
         <div id="documents-list" class="list"></div>
       </section>
 
+      <section class="panel panel--stacked">
+        <div class="panel__header">
+          <h2 data-i18n="docOps.title">AI-Powered Document Operations</h2>
+          <p class="muted" data-i18n="docOps.subtitle">
+            OCR extraction, intelligent routing, workflow automation, collaboration, and analytics.
+          </p>
+        </div>
+
+        <div class="split-grid">
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="docOps.ocr.title">AI-Powered OCR & Intelligent Routing</h3>
+              <p class="muted" data-i18n="docOps.ocr.subtitle">
+                Extract text, classify content, and route documents to the correct department.
+              </p>
+            </div>
+            <label>
+              <span data-i18n="docOps.common.document">Document</span>
+              <select id="ops-document-select"></select>
+            </label>
+            <div class="quick-actions">
+              <button id="run-ocr-btn" type="button" class="btn btn--primary" data-i18n="docOps.ocr.runButton">
+                Run OCR & route
+              </button>
+            </div>
+            <div id="ocr-result" class="list"></div>
+            <div id="processing-list" class="list"></div>
+          </section>
+
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="docOps.workflow.title">Workflow Automation</h3>
+              <p class="muted" data-i18n="docOps.workflow.subtitle">
+                Create approval workflows and automate repetitive document decisions.
+              </p>
+              <p class="muted small hidden" id="workflow-rbac-note"></p>
+            </div>
+            <form id="workflow-template-form" class="form-grid compact">
+              <label>
+                <span data-i18n="docOps.workflow.templateName">Template Name</span>
+                <input
+                  name="name"
+                  required
+                  placeholder="e.g. Multi-stage compliance approval"
+                  data-i18n-placeholder="docOps.workflow.templateNamePlaceholder"
+                />
+              </label>
+              <label>
+                <span data-i18n="docOps.workflow.department">Department</span>
+                <select name="department" required>
+                  <option value="compliance" data-i18n="docOps.department.compliance">Compliance</option>
+                  <option value="legal" data-i18n="docOps.department.legal">Legal</option>
+                  <option value="finance" data-i18n="docOps.department.finance">Finance</option>
+                  <option value="it_security" data-i18n="docOps.department.it_security">IT Security</option>
+                  <option value="hr" data-i18n="docOps.department.hr">HR</option>
+                  <option value="operations" data-i18n="docOps.department.operations">Operations</option>
+                </select>
+              </label>
+              <label class="full">
+                <span data-i18n="docOps.workflow.steps">Steps (comma or newline separated)</span>
+                <textarea
+                  name="steps"
+                  rows="2"
+                  required
+                  placeholder="Initial Review, Manager Approval, Archive"
+                  data-i18n-placeholder="docOps.workflow.stepsPlaceholder"
+                ></textarea>
+              </label>
+              <button type="submit" class="btn btn--secondary" data-i18n="docOps.workflow.createTemplateButton">
+                Create workflow template
+              </button>
+            </form>
+
+            <form id="workflow-start-form" class="form-grid compact">
+              <label>
+                <span data-i18n="docOps.workflow.templateSelect">Template</span>
+                <select id="workflow-template-select" name="templateId" required></select>
+              </label>
+              <button type="submit" class="btn btn--primary" data-i18n="docOps.workflow.startRunButton">
+                Start workflow run
+              </button>
+            </form>
+
+            <form id="workflow-advance-form" class="form-grid compact">
+              <label>
+                <span data-i18n="docOps.workflow.runSelect">Workflow Run</span>
+                <select id="workflow-run-select" name="runId" required></select>
+              </label>
+              <label>
+                <span data-i18n="docOps.workflow.action">Action</span>
+                <select name="action" required>
+                  <option value="approve" data-i18n="docOps.workflow.actionApprove">Approve</option>
+                  <option value="reject" data-i18n="docOps.workflow.actionReject">Reject</option>
+                </select>
+              </label>
+              <label class="full">
+                <span data-i18n="docOps.workflow.comment">Comment</span>
+                <textarea name="comment" rows="2"></textarea>
+              </label>
+              <button type="submit" class="btn btn--secondary" data-i18n="docOps.workflow.advanceRunButton">
+                Apply action
+              </button>
+            </form>
+
+            <div id="workflow-runs-list" class="list"></div>
+          </section>
+        </div>
+
+        <div class="split-grid">
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="docOps.collab.title">Real-time Collaboration & Versioning</h3>
+              <p class="muted" data-i18n="docOps.collab.subtitle">
+                Collaborate with comments, version control, and immutable audit trails.
+              </p>
+            </div>
+            <form id="document-version-form" class="form-grid compact">
+              <label class="full">
+                <span data-i18n="docOps.collab.versionFile">Upload New Version</span>
+                <input name="versionFile" type="file" required />
+              </label>
+              <button type="submit" class="btn btn--secondary" data-i18n="docOps.collab.uploadVersionButton">
+                Upload version
+              </button>
+            </form>
+            <form id="collaboration-form" class="form-grid compact">
+              <label class="full">
+                <span data-i18n="docOps.collab.comment">Comment</span>
+                <textarea
+                  name="message"
+                  rows="2"
+                  required
+                  placeholder="Add context for your team..."
+                  data-i18n-placeholder="docOps.collab.commentPlaceholder"
+                ></textarea>
+              </label>
+              <button type="submit" class="btn btn--primary" data-i18n="docOps.collab.addCommentButton">
+                Add comment
+              </button>
+            </form>
+            <div id="document-versions-list" class="list"></div>
+            <div id="collaboration-comments-list" class="list"></div>
+            <div id="audit-trail-list" class="list"></div>
+          </section>
+
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="docOps.analytics.title">Advanced Analytics & Secure Storage</h3>
+              <p class="muted" data-i18n="docOps.analytics.subtitle">
+                Monitor OCR quality, routing efficiency, automation rates, and compliance controls.
+              </p>
+            </div>
+            <div class="quick-actions">
+              <button
+                id="refresh-analytics-btn"
+                type="button"
+                class="btn btn--secondary"
+                data-i18n="docOps.analytics.refreshButton"
+              >
+                Refresh analytics
+              </button>
+            </div>
+            <div id="analytics-grid" class="kpi-grid"></div>
+          </section>
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel__header">
           <h2 data-i18n="indicators.title">Cybersecurity Governance & Workflow Automation Indicators</h2>

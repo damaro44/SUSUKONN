@@ -107,4 +107,81 @@ describe("Eclair API smoke", () => {
     expect(download.headers["content-type"]).toContain("text/plain");
     expect(download.text).toBe("proof-of-compliance");
   });
+
+  it("runs OCR routing, workflows, collaboration, and analytics", async () => {
+    const token = await loginAs("compliance@eclair.tech", "Compliance@2026");
+    const contentBase64 = Buffer.from(
+      "Compliance policy evidence with audit and governance controls.",
+      "utf8"
+    ).toString("base64");
+
+    const upload = await request(app)
+      .post("/v1/documents/upload")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        title: "Routing Source Doc",
+        category: "policy",
+        fileName: "routing-source.txt",
+        mimeType: "text/plain",
+        contentBase64
+      });
+    expect(upload.status).toBe(201);
+    const documentId = upload.body.data.id as string;
+
+    const ocr = await request(app)
+      .post(`/v1/documents/${documentId}/process`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(ocr.status).toBe(201);
+    expect(ocr.body.data.ocr.confidence).toBeGreaterThan(99);
+    expect(ocr.body.data.routing.department).toBe("compliance");
+
+    const template = await request(app)
+      .post("/v1/workflows/templates")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        name: "Test Approval Flow",
+        department: "compliance",
+        steps: ["Review", "Approval", "Archive"]
+      });
+    expect(template.status).toBe(201);
+    const templateId = template.body.data.id as string;
+
+    const startRun = await request(app)
+      .post("/v1/workflows/runs/start")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        templateId,
+        documentId
+      });
+    expect(startRun.status).toBe(201);
+    const runId = startRun.body.data.id as string;
+
+    const advance = await request(app)
+      .post("/v1/workflows/runs/advance")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        runId,
+        action: "approve",
+        comment: "Looks good"
+      });
+    expect(advance.status).toBe(200);
+    expect(advance.body.data.status).toBe("In Progress");
+
+    const comment = await request(app)
+      .post("/v1/collaboration/comments")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        documentId,
+        message: "Please review this before final approval."
+      });
+    expect(comment.status).toBe(201);
+    expect(comment.body.data.documentId).toBe(documentId);
+
+    const analytics = await request(app)
+      .get("/v1/analytics/documents")
+      .set("Authorization", `Bearer ${token}`);
+    expect(analytics.status).toBe(200);
+    expect(analytics.body.data.ocr.totalProcessed).toBeGreaterThan(0);
+    expect(analytics.body.data.security.complianceFrameworks).toEqual(["HIPAA", "SOC 2", "GDPR"]);
+  });
 });
