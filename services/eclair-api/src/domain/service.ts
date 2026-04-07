@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { complianceAudits, trainingPlans, users } from "./store.js";
-import type { ComplianceAuditItem, TrainingPlan, UserRecord } from "../types/domain.js";
+import { complianceAudits, documentRecords, trainingPlans, users } from "./store.js";
+import type { ComplianceAuditItem, DocumentRecord, Role, TrainingPlan, UserRecord } from "../types/domain.js";
 
 interface CreateAuditInput {
   standard: string;
@@ -18,12 +18,51 @@ interface CreateTrainingInput {
   objective: string;
 }
 
+interface RegisterInput {
+  fullName: string;
+  email: string;
+  password: string;
+  role: Exclude<Role, "super_admin">;
+}
+
+interface UploadDocumentInput {
+  title: string;
+  category: string;
+  fileName: string;
+  mimeType: string;
+  contentBase64: string;
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 export const eclairService = {
   login(email: string, password: string): UserRecord | null {
-    const user = users.find(item => item.email.toLowerCase() === email.toLowerCase());
+    const user = users.find(item => item.email.toLowerCase() === normalizeEmail(email));
     if (!user || user.password !== password) {
       return null;
     }
+    return user;
+  },
+
+  register(input: RegisterInput): UserRecord {
+    const normalizedEmail = normalizeEmail(input.email);
+    const exists = users.some(item => item.email.toLowerCase() === normalizedEmail);
+    if (exists) {
+      throw new Error("Email is already registered");
+    }
+
+    const user: UserRecord = {
+      id: randomUUID(),
+      fullName: input.fullName.trim(),
+      email: normalizedEmail,
+      password: input.password,
+      role: input.role,
+      createdAt: new Date().toISOString()
+    };
+
+    users.unshift(user);
     return user;
   },
 
@@ -83,6 +122,48 @@ export const eclairService = {
 
     trainingPlans.unshift(record);
     return record;
+  },
+
+  listDocuments(): Omit<DocumentRecord, "contentBase64">[] {
+    return [...documentRecords]
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))
+      .map(({ contentBase64: _contentBase64, ...rest }) => rest);
+  },
+
+  uploadDocument(input: UploadDocumentInput, userId: string): Omit<DocumentRecord, "contentBase64"> {
+    const contentBuffer = Buffer.from(input.contentBase64, "base64");
+    if (contentBuffer.length === 0) {
+      throw new Error("Uploaded document content is empty");
+    }
+
+    const maxBytes = 5 * 1024 * 1024;
+    if (contentBuffer.length > maxBytes) {
+      throw new Error("Document exceeds 5MB upload limit");
+    }
+
+    const record: DocumentRecord = {
+      id: randomUUID(),
+      title: input.title.trim(),
+      fileName: input.fileName.trim(),
+      mimeType: input.mimeType.trim() || "application/octet-stream",
+      sizeBytes: contentBuffer.length,
+      category: input.category.trim(),
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: userId,
+      contentBase64: input.contentBase64
+    };
+
+    documentRecords.unshift(record);
+    const { contentBase64: _contentBase64, ...meta } = record;
+    return meta;
+  },
+
+  getDocumentForDownload(documentId: string): DocumentRecord {
+    const document = documentRecords.find(item => item.id === documentId);
+    if (!document) {
+      throw new Error("Document not found");
+    }
+    return document;
   },
 
   dashboard() {

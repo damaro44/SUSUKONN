@@ -6,6 +6,7 @@ export interface UserRecord {
   email: string;
   password: string;
   role: Role;
+  createdAt: string;
 }
 
 export interface ComplianceAuditItem {
@@ -29,4 +30,16 @@ export interface TrainingPlan {
   objective: string;
   createdAt: string;
   createdBy: string;
+}
+
+export interface DocumentRecord {
+  id: string;
+  title: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  category: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  contentBase64: string;
 }

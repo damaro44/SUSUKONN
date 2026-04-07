@@ -135,6 +135,14 @@ h1 {
   pointer-events: none;
 }
 
+.document-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.35rem;
+}
+
 .small {
   font-size: 0.84rem;
 }

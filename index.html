@@ -98,6 +98,59 @@
             </button>
           </form>
 
+          <form id="register-form" class="auth-form">
+            <label>
+              <span data-i18n="auth.registerFullName">Full Name</span>
+              <input
+                type="text"
+                name="fullName"
+                placeholder="e.g. Operations Manager"
+                data-i18n-placeholder="auth.registerFullNamePlaceholder"
+                required
+              />
+            </label>
+            <label>
+              <span data-i18n="auth.registerEmailLabel">Email</span>
+              <input
+                type="email"
+                name="email"
+                placeholder="new.user@eclair.tech"
+                data-i18n-placeholder="auth.registerEmailPlaceholder"
+                required
+              />
+            </label>
+            <label>
+              <span data-i18n="auth.registerRoleLabel">Role</span>
+              <select name="role" required>
+                <option value="" data-i18n="common.select">Select...</option>
+                <option value="compliance_officer" data-i18n="role.compliance_officer">Compliance Officer</option>
+                <option value="auditor" data-i18n="role.auditor">Auditor</option>
+                <option value="training_manager" data-i18n="role.training_manager">Training Manager</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="auth.registerPasswordLabel">Password</span>
+              <input
+                type="password"
+                name="password"
+                placeholder="At least 8 chars"
+                data-i18n-placeholder="auth.registerPasswordPlaceholder"
+                required
+              />
+            </label>
+            <label>
+              <span data-i18n="auth.registerConfirmLabel">Confirm Password</span>
+              <input
+                type="password"
+                name="confirmPassword"
+                placeholder="Repeat password"
+                data-i18n-placeholder="auth.registerConfirmPlaceholder"
+                required
+              />
+            </label>
+            <button class="btn btn--secondary" type="submit" data-i18n="auth.registerButton">Sign up & continue</button>
+          </form>
+
           <p class="muted small" id="auth-status" data-i18n="auth.notAuthenticated">Not authenticated.</p>
 
           <section id="capabilities-panel" class="capabilities hidden">
@@ -312,6 +365,42 @@
           <div id="training-list" class="list"></div>
         </section>
       </div>
+
+      <section class="panel panel--stacked">
+        <div class="panel__header">
+          <h2 data-i18n="documents.title">Document Upload Center</h2>
+          <p class="muted" data-i18n="documents.subtitle">
+            Upload compliance evidence, policies, and supporting records.
+          </p>
+          <p class="muted small hidden" id="documents-rbac-note"></p>
+        </div>
+        <form id="document-upload-form" class="form-grid compact">
+          <label>
+            <span data-i18n="documents.uploadTitle">Document Title</span>
+            <input
+              name="title"
+              required
+              placeholder="e.g. Q2 PARAE Evidence Bundle"
+              data-i18n-placeholder="documents.uploadTitlePlaceholder"
+            />
+          </label>
+          <label>
+            <span data-i18n="documents.category">Category</span>
+            <input
+              name="category"
+              required
+              placeholder="e.g. compliance_evidence"
+              data-i18n-placeholder="documents.categoryPlaceholder"
+            />
+          </label>
+          <label class="full">
+            <span data-i18n="documents.file">File</span>
+            <input name="documentFile" type="file" required />
+          </label>
+          <button type="submit" class="btn btn--primary" data-i18n="documents.uploadButton">Upload document</button>
+        </form>
+        <div id="documents-list" class="list"></div>
+      </section>
 
       <section class="panel">
         <div class="panel__header">

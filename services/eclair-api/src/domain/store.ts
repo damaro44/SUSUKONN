@@ -1,4 +1,4 @@
-import type { ComplianceAuditItem, TrainingPlan, UserRecord } from "../types/domain.js";
+import type { ComplianceAuditItem, DocumentRecord, TrainingPlan, UserRecord } from "../types/domain.js";
 
 const now = () => new Date().toISOString();
 
@@ -8,28 +8,32 @@ export const users: UserRecord[] = [
     fullName: "Eclair Super Admin",
     email: "admin@eclair.tech",
     password: "Admin@2026",
-    role: "super_admin"
+    role: "super_admin",
+    createdAt: now()
   },
   {
     id: "u-compliance",
     fullName: "Compliance Lead",
     email: "compliance@eclair.tech",
     password: "Compliance@2026",
-    role: "compliance_officer"
+    role: "compliance_officer",
+    createdAt: now()
   },
   {
     id: "u-auditor",
     fullName: "Government Auditor",
     email: "auditor@eclair.tech",
     password: "Auditor@2026",
-    role: "auditor"
+    role: "auditor",
+    createdAt: now()
   },
   {
     id: "u-training",
     fullName: "Training Manager",
     email: "training@eclair.tech",
     password: "Training@2026",
-    role: "training_manager"
+    role: "training_manager",
+    createdAt: now()
   }
 ];
 
@@ -68,5 +72,24 @@ export const trainingPlans: TrainingPlan[] = [
     objective: "Operationalize compliant AI workflow governance across ministries.",
     createdAt: now(),
     createdBy: "u-training"
+  }
+];
+
+const sampleDoc = Buffer.from(
+  "ETA evidence pack sample content for audits and governance records.",
+  "utf8"
+).toString("base64");
+
+export const documentRecords: DocumentRecord[] = [
+  {
+    id: "doc-1",
+    title: "Sample Compliance Evidence",
+    fileName: "eta-sample-evidence.txt",
+    mimeType: "text/plain",
+    sizeBytes: 66,
+    category: "compliance_evidence",
+    uploadedAt: now(),
+    uploadedBy: "u-compliance",
+    contentBase64: sampleDoc
   }
 ];

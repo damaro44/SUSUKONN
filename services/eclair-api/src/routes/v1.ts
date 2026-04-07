@@ -19,6 +19,18 @@ const loginSchema = z.object({
   password: z.string().min(8)
 });
 
+const registerSchema = z.object({
+  fullName: z.string().min(2),
+  email: z.string().email(),
+  password: z
+    .string()
+    .min(8)
+    .regex(/[A-Z]/, "Password must include at least one uppercase letter")
+    .regex(/[a-z]/, "Password must include at least one lowercase letter")
+    .regex(/[0-9]/, "Password must include at least one number"),
+  role: z.enum(["compliance_officer", "auditor", "training_manager"])
+});
+
 const createAuditSchema = z.object({
   standard: z.string().min(2),
   severity: z.enum(["Critical", "High", "Medium", "Low"]),
@@ -38,6 +50,23 @@ const createTrainingSchema = z.object({
   targetCompletion: z.number().min(1).max(100),
   objective: z.string().min(4)
 });
+
+const uploadDocumentSchema = z.object({
+  title: z.string().min(2),
+  category: z.string().min(2),
+  fileName: z.string().min(1),
+  mimeType: z.string().min(1),
+  contentBase64: z.string().min(4)
+});
+
+function toPublicUser(user: { id: string; fullName: string; email: string; role: string }) {
+  return {
+    id: user.id,
+    fullName: user.fullName,
+    email: user.email,
+    role: user.role
+  };
+}
 
 v1Router.get("/health", (_request, response) => {
   response.json({
@@ -73,12 +102,26 @@ v1Router.post("/auth/login", (request, response) => {
   response.json({
     data: {
       accessToken: token,
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role
-      }
+      user: toPublicUser(user)
+    }
+  });
+});
+
+v1Router.post("/auth/register", (request, response) => {
+  const payload = registerSchema.parse(request.body);
+  const user = eclairService.register(payload);
+
+  const token = signAccessToken({
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    fullName: user.fullName
+  });
+
+  response.status(201).json({
+    data: {
+      accessToken: token,
+      user: toPublicUser(user)
     }
   });
 });
@@ -139,6 +182,29 @@ v1Router.post(
     response.status(201).json({ data });
   }
 );
+
+v1Router.get("/documents", requireAuth, (request, response) => {
+  response.json({ data: eclairService.listDocuments() });
+});
+
+v1Router.post("/documents/upload", requireAuth, (request, response) => {
+  const payload = uploadDocumentSchema.parse(request.body);
+  const data = eclairService.uploadDocument(payload, request.authUser!.id);
+  response.status(201).json({ data });
+});
+
+v1Router.get("/documents/:documentId/download", requireAuth, (request, response) => {
+  const documentId = pathParam(request.params.documentId);
+  const document = eclairService.getDocumentForDownload(documentId);
+  const fileBuffer = Buffer.from(document.contentBase64, "base64");
+
+  response.setHeader("Content-Type", document.mimeType || "application/octet-stream");
+  response.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${encodeURIComponent(document.fileName || `${document.id}.bin`)}"`
+  );
+  response.status(200).send(fileBuffer);
+});
 
 v1Router.get(
   "/reports/compliance",

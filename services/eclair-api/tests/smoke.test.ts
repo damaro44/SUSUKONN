@@ -62,4 +62,49 @@ describe("Eclair API smoke", () => {
     expect(pdfReport.headers["content-type"]).toContain("application/pdf");
     expect(pdfReport.body.length).toBeGreaterThan(100);
   });
+
+  it("registers a new user and returns auth token", async () => {
+    const response = await request(app).post("/v1/auth/register").send({
+      fullName: "New Compliance User",
+      email: "new.compliance.user@eclair.tech",
+      password: "SecurePass123",
+      role: "compliance_officer"
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.user.email).toBe("new.compliance.user@eclair.tech");
+    expect(response.body.data.accessToken).toBeTruthy();
+  });
+
+  it("uploads, lists, and downloads documents", async () => {
+    const token = await loginAs("compliance@eclair.tech", "Compliance@2026");
+    const contentBase64 = Buffer.from("proof-of-compliance", "utf8").toString("base64");
+
+    const upload = await request(app)
+      .post("/v1/documents/upload")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        title: "Compliance Proof",
+        category: "evidence",
+        fileName: "proof.txt",
+        mimeType: "text/plain",
+        contentBase64
+      });
+
+    expect(upload.status).toBe(201);
+    expect(upload.body.data.title).toBe("Compliance Proof");
+    expect(upload.body.data.id).toBeTruthy();
+
+    const list = await request(app).get("/v1/documents").set("Authorization", `Bearer ${token}`);
+    expect(list.status).toBe(200);
+    expect(Array.isArray(list.body.data)).toBe(true);
+    expect(list.body.data.some((item: { id: string }) => item.id === upload.body.data.id)).toBe(true);
+
+    const download = await request(app)
+      .get(`/v1/documents/${upload.body.data.id}/download`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(download.status).toBe(200);
+    expect(download.headers["content-type"]).toContain("text/plain");
+    expect(download.text).toBe("proof-of-compliance");
+  });
 });

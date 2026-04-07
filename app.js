@@ -4,10 +4,10 @@ const STORAGE_KEY = "eclair-tech-assistance-v4";
 const DEFAULT_API_BASE_URL = "http://localhost:4100/v1";
 
 const ROLE_PERMISSIONS = {
-  super_admin: ["refresh", "createAudit", "createTraining", "downloadReports"],
-  compliance_officer: ["refresh", "createAudit", "createTraining", "downloadReports"],
+  super_admin: ["refresh", "createAudit", "createTraining", "downloadReports", "uploadDocuments"],
+  compliance_officer: ["refresh", "createAudit", "createTraining", "downloadReports", "uploadDocuments"],
   auditor: ["refresh", "downloadReports"],
-  training_manager: ["refresh", "createTraining"]
+  training_manager: ["refresh", "createTraining", "uploadDocuments"]
 };
 
 const appState = {
@@ -21,6 +21,7 @@ const appState = {
   profile: null,
   audits: [],
   trainings: [],
+  documents: [],
   dashboard: null,
   services: [
     { key: "compliance", progress: 20, risk: 72 },
@@ -37,6 +38,7 @@ const el = {
   connectionForm: document.getElementById("connection-form"),
   apiBaseUrl: document.getElementById("api-base-url"),
   loginForm: document.getElementById("login-form"),
+  registerForm: document.getElementById("register-form"),
   logoutBtn: document.getElementById("logout-btn"),
   authStatus: document.getElementById("auth-status"),
   refreshLiveData: document.getElementById("refresh-live-data"),
@@ -57,6 +59,9 @@ const el = {
   profileForm: document.getElementById("profile-form"),
   auditForm: document.getElementById("audit-form"),
   trainingForm: document.getElementById("training-form"),
+  documentUploadForm: document.getElementById("document-upload-form"),
+  documentsRbacNote: document.getElementById("documents-rbac-note"),
+  documentsList: document.getElementById("documents-list"),
   auditRbacNote: document.getElementById("audit-rbac-note"),
   trainingRbacNote: document.getElementById("training-rbac-note"),
   readinessScore: document.getElementById("readiness-score"),
@@ -164,6 +169,7 @@ function hydrateState() {
     if (parsed.profile) appState.profile = parsed.profile;
     if (Array.isArray(parsed.audits)) appState.audits = parsed.audits;
     if (Array.isArray(parsed.trainings)) appState.trainings = parsed.trainings;
+    if (Array.isArray(parsed.documents)) appState.documents = parsed.documents;
     if (parsed.dashboard) appState.dashboard = parsed.dashboard;
     if (Array.isArray(parsed.services) && parsed.services.length === 6) {
       appState.services = parsed.services;
@@ -184,6 +190,7 @@ function persistState() {
       profile: appState.profile,
       audits: appState.audits,
       trainings: appState.trainings,
+      documents: appState.documents,
       dashboard: appState.dashboard,
       services: appState.services
     })
@@ -221,6 +228,7 @@ function updateAuthUi() {
     el.downloadPdf.disabled = true;
     setSectionPermission(el.auditForm, el.auditRbacNote, false, t("rbac.signInCreateAudit"), false);
     setSectionPermission(el.trainingForm, el.trainingRbacNote, false, t("rbac.signInCreateTraining"), false);
+    setSectionPermission(el.documentUploadForm, el.documentsRbacNote, false, t("rbac.signInUploadDocuments"), false);
     toggleReportPermission(false, t("rbac.signInExport"), false);
     el.authStatus.textContent = t("status.notAuthenticated");
     renderCapabilities();
@@ -231,6 +239,7 @@ function updateAuthUi() {
   const canDownloadReports = hasPermission("downloadReports");
   const canCreateAudit = hasPermission("createAudit");
   const canCreateTraining = hasPermission("createTraining");
+  const canUploadDocuments = hasPermission("uploadDocuments");
 
   el.refreshLiveData.disabled = !canRefresh;
   el.downloadCsv.disabled = !canDownloadReports;
@@ -238,6 +247,12 @@ function updateAuthUi() {
 
   setSectionPermission(el.auditForm, el.auditRbacNote, canCreateAudit, t("rbac.noCreateAudit"));
   setSectionPermission(el.trainingForm, el.trainingRbacNote, canCreateTraining, t("rbac.noCreateTraining"));
+  setSectionPermission(
+    el.documentUploadForm,
+    el.documentsRbacNote,
+    canUploadDocuments,
+    t("rbac.noUploadDocuments")
+  );
   toggleReportPermission(canDownloadReports, t("rbac.noExport"));
 
   el.authStatus.textContent = t("status.authenticated", {
@@ -289,15 +304,17 @@ async function apiFetch(path, options = {}) {
 async function refreshLiveData() {
   ensureAuthed();
 
-  const [dashboardResult, auditsResult, trainingsResult] = await Promise.all([
+  const [dashboardResult, auditsResult, trainingsResult, documentsResult] = await Promise.all([
     apiFetch("/dashboard"),
     apiFetch("/compliance/audits"),
-    apiFetch("/training/plans")
+    apiFetch("/training/plans"),
+    apiFetch("/documents")
   ]);
 
   appState.dashboard = dashboardResult.data;
   appState.audits = auditsResult.data;
   appState.trainings = trainingsResult.data;
+  appState.documents = documentsResult.data;
 
   mapServicesFromLiveData();
   persistState();
@@ -334,6 +351,31 @@ async function downloadReport(format) {
   URL.revokeObjectURL(url);
 
   toast(format === "pdf" ? t("toast.pdfDownloaded") : t("toast.csvDownloaded"), "success");
+}
+
+async function downloadDocument(documentId, fileName) {
+  ensureAuthed();
+  const response = await fetch(`${appState.apiBaseUrl}/documents/${documentId}/download`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${appState.auth.token}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to download document (${response.status}).`);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName || `document-${documentId}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  toast(t("toast.documentDownloaded"), "success");
 }
 
 function mapServicesFromLiveData() {
@@ -411,11 +453,52 @@ async function handleLoginSubmit(event) {
   }
 }
 
+async function handleRegisterSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const fullName = formData.get("fullName")?.toString().trim() || "";
+  const email = formData.get("email")?.toString().trim() || "";
+  const role = formData.get("role")?.toString() || "";
+  const password = formData.get("password")?.toString() || "";
+  const confirmPassword = formData.get("confirmPassword")?.toString() || "";
+
+  if (!fullName || !email || !role || !password || !confirmPassword) {
+    toast(t("toast.registrationMissing"), "error");
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    toast(t("toast.registrationPasswordMismatch"), "error");
+    return;
+  }
+
+  try {
+    const register = await apiFetch("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ fullName, email, password, role })
+    });
+
+    appState.auth.token = register.data.accessToken;
+    appState.auth.user = register.data.user;
+    persistState();
+    updateAuthUi();
+    event.currentTarget.reset();
+    toast(t("toast.registrationSuccess", { name: register.data.user.fullName }), "success");
+    await refreshLiveData();
+  } catch (error) {
+    handleError(error);
+  }
+}
+
 function logoutLocal(message) {
   appState.auth = { token: "", user: null };
   appState.dashboard = null;
+  appState.audits = [];
+  appState.trainings = [];
+  appState.documents = [];
   persistState();
   updateAuthUi();
+  renderAll();
   if (message) {
     toast(message, "success");
   }
@@ -495,6 +578,49 @@ async function handleTrainingSubmit(event) {
 
     event.currentTarget.reset();
     toast(t("toast.trainingCreated"), "success");
+    await refreshLiveData();
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+async function handleDocumentUploadSubmit(event) {
+  event.preventDefault();
+  ensureAuthed();
+  if (!hasPermission("uploadDocuments")) {
+    throw new Error(t("error.noDocumentPermission"));
+  }
+
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const title = formData.get("title")?.toString().trim() || "";
+  const category = formData.get("category")?.toString().trim() || "";
+  const file = formData.get("documentFile");
+  if (!(file instanceof File) || !file.name) {
+    throw new Error(t("documents.fileRequired"));
+  }
+
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+  const contentBase64 = btoa(binary);
+
+  try {
+    await apiFetch("/documents/upload", {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        category,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        contentBase64
+      })
+    });
+    form.reset();
+    toast(t("toast.documentUploaded"), "success");
     await refreshLiveData();
   } catch (error) {
     handleError(error);
@@ -639,6 +765,7 @@ function renderAll() {
   renderActionQueue();
   renderAudits();
   renderTrainings();
+  renderDocuments();
   renderIndicators();
   renderTags();
 }
@@ -726,6 +853,28 @@ function renderTrainings() {
     .join("");
 }
 
+function renderDocuments() {
+  if (!appState.documents.length) {
+    el.documentsList.innerHTML = `<p class="muted">${t("list.noDocuments")}</p>`;
+    return;
+  }
+
+  el.documentsList.innerHTML = appState.documents
+    .map(
+      item => `
+      <article class="list-item">
+        <div class="item-head">
+          <strong>${escapeHtml(item.title)}</strong>
+          <button class="btn btn--secondary document-download-btn" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.fileName)}">${t("list.download")}</button>
+        </div>
+        <p class="muted">${escapeHtml(item.fileName)}</p>
+        <p class="muted">${t("list.documentCategory")}: ${escapeHtml(item.category)} | ${t("list.documentSize")}: ${formatBytes(item.sizeBytes)} | ${t("list.documentDate")}: ${new Date(item.uploadedAt).toLocaleString()}</p>
+      </article>
+    `
+    )
+    .join("");
+}
+
 function renderIndicators() {
   el.indicatorGrid.innerHTML = buildIndicators()
     .map(
@@ -772,6 +921,26 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function formatBytes(sizeBytes) {
+  const size = Number(sizeBytes) || 0;
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function toast(message, level = "info") {
   const notice = document.createElement("div");
   notice.className = `toast toast--${level}`;
@@ -812,6 +981,7 @@ function bindEvents() {
 
   el.connectionForm.addEventListener("submit", handleConnectionSubmit);
   el.loginForm.addEventListener("submit", handleLoginSubmit);
+  el.registerForm.addEventListener("submit", handleRegisterSubmit);
   el.logoutBtn.addEventListener("click", () => logoutLocal(t("toast.signedOut")));
   el.refreshLiveData.addEventListener("click", () => {
     refreshLiveData().catch(handleError);
@@ -826,6 +996,16 @@ function bindEvents() {
   el.profileForm.addEventListener("submit", handleProfileSubmit);
   el.auditForm.addEventListener("submit", handleAuditSubmit);
   el.trainingForm.addEventListener("submit", handleTrainingSubmit);
+  el.documentUploadForm.addEventListener("submit", handleDocumentUploadSubmit);
+  el.documentsList.addEventListener("click", event => {
+    const button = event.target.closest(".document-download-btn");
+    if (!button) {
+      return;
+    }
+    const documentId = button.getAttribute("data-document-id") || "";
+    const fileName = button.getAttribute("data-file-name") || "";
+    downloadDocument(documentId, fileName).catch(handleError);
+  });
 }
 
 function init() {
