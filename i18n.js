@@ -288,6 +288,12 @@ export const I18N = {
     "docOps.workflow.noTemplate": "No workflow templates created yet.",
     "docOps.workflow.noRun": "No workflow runs available.",
     "docOps.workflow.stepProgress": "Step {index} of {total}",
+    "docOps.workflow.status.In Progress": "In Progress",
+    "docOps.workflow.status.Approved": "Approved",
+    "docOps.workflow.status.Rejected": "Rejected",
+    "docOps.workflow.stepStatus.Pending": "Pending",
+    "docOps.workflow.stepStatus.Approved": "Approved",
+    "docOps.workflow.stepStatus.Rejected": "Rejected",
 
     "docOps.collab.title": "Real-time Collaboration & Versioning",
     "docOps.collab.subtitle":
@@ -301,6 +307,13 @@ export const I18N = {
     "docOps.collab.versionLabel": "Version {number}",
     "docOps.collab.noComments": "No collaboration comments yet.",
     "docOps.collab.noAuditTrail": "No audit trail entries yet.",
+    "docOps.auditTrail.action.DOCUMENT_UPLOADED": "Document uploaded",
+    "docOps.auditTrail.action.DOCUMENT_VERSION_UPLOADED": "Document version uploaded",
+    "docOps.auditTrail.action.OCR_PROCESSED": "OCR processed",
+    "docOps.auditTrail.action.WORKFLOW_TEMPLATE_CREATED": "Workflow template created",
+    "docOps.auditTrail.action.WORKFLOW_RUN_STARTED": "Workflow run started",
+    "docOps.auditTrail.action.WORKFLOW_RUN_ADVANCED": "Workflow run advanced",
+    "docOps.auditTrail.action.DOCUMENT_COMMENT_ADDED": "Comment added",
 
     "docOps.analytics.title": "Advanced Analytics & Secure Storage",
     "docOps.analytics.subtitle":
@@ -622,6 +635,12 @@ export const I18N = {
     "docOps.workflow.noTemplate": "Aucun modele de workflow cree.",
     "docOps.workflow.noRun": "Aucune execution de workflow disponible.",
     "docOps.workflow.stepProgress": "Etape {index} sur {total}",
+    "docOps.workflow.status.In Progress": "En cours",
+    "docOps.workflow.status.Approved": "Approuve",
+    "docOps.workflow.status.Rejected": "Rejete",
+    "docOps.workflow.stepStatus.Pending": "En attente",
+    "docOps.workflow.stepStatus.Approved": "Approuve",
+    "docOps.workflow.stepStatus.Rejected": "Rejete",
 
     "docOps.collab.title": "Collaboration en temps reel et versioning",
     "docOps.collab.subtitle":
@@ -635,6 +654,13 @@ export const I18N = {
     "docOps.collab.versionLabel": "Version {number}",
     "docOps.collab.noComments": "Aucun commentaire collaboratif pour le moment.",
     "docOps.collab.noAuditTrail": "Aucune entree de piste d'audit.",
+    "docOps.auditTrail.action.DOCUMENT_UPLOADED": "Document televerse",
+    "docOps.auditTrail.action.DOCUMENT_VERSION_UPLOADED": "Nouvelle version televersee",
+    "docOps.auditTrail.action.OCR_PROCESSED": "OCR traite",
+    "docOps.auditTrail.action.WORKFLOW_TEMPLATE_CREATED": "Modele de workflow cree",
+    "docOps.auditTrail.action.WORKFLOW_RUN_STARTED": "Execution de workflow demarree",
+    "docOps.auditTrail.action.WORKFLOW_RUN_ADVANCED": "Execution de workflow avancee",
+    "docOps.auditTrail.action.DOCUMENT_COMMENT_ADDED": "Commentaire ajoute",
 
     "docOps.analytics.title": "Analyses avancees et stockage securise",
     "docOps.analytics.subtitle":

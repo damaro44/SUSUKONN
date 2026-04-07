@@ -163,6 +163,46 @@ function formatBytes(sizeBytes) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function localeTag() {
+  return appState.language === "fr" ? "fr-FR" : "en-US";
+}
+
+function formatNumber(value, options = {}) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "0";
+  return new Intl.NumberFormat(localeTag(), options).format(number);
+}
+
+function formatPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "0%";
+  return `${formatNumber(number, { maximumFractionDigits: 1 })}%`;
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value ?? "");
+  return date.toLocaleString(localeTag());
+}
+
+function formatDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value ?? "");
+  return date.toLocaleDateString(localeTag());
+}
+
+function translateWorkflowRunStatus(status) {
+  return t(`workflowStatus.${status}`);
+}
+
+function translateWorkflowStepStatus(status) {
+  return t(`workflowStepStatus.${status}`);
+}
+
+function translateEventAction(action) {
+  return t(`eventAction.${action}`);
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -458,12 +498,15 @@ function buildKpis() {
     appState.services.reduce((sum, service) => sum + service.progress, 0) / appState.services.length
   );
   return [
-    { label: t("kpi.readiness"), value: `${readiness}%` },
-    { label: t("kpi.avgProgress"), value: `${avgProgress}%` },
-    { label: t("kpi.risk"), value: appState.dashboard ? `${appState.dashboard.riskScore}/100` : `${avgRisk}/100` },
+    { label: t("kpi.readiness"), value: formatPercent(readiness) },
+    { label: t("kpi.avgProgress"), value: formatPercent(avgProgress) },
+    {
+      label: t("kpi.risk"),
+      value: appState.dashboard ? `${formatNumber(appState.dashboard.riskScore)}/100` : `${formatNumber(avgRisk)}/100`
+    },
     {
       label: t("kpi.openFindings"),
-      value: appState.dashboard ? String(appState.dashboard.openAuditFindings) : String(appState.audits.length)
+      value: appState.dashboard ? formatNumber(appState.dashboard.openAuditFindings) : formatNumber(appState.audits.length)
     }
   ];
 }
@@ -488,14 +531,18 @@ function buildIndicators() {
   const automationService = appState.services.find(service => service.key === "automation");
   const aiService = appState.services.find(service => service.key === "ai-workflow");
   return [
-    { title: t("indicator.critical"), value: String(openCritical), note: t("indicator.note.critical") },
-    { title: t("indicator.high"), value: String(openHigh), note: t("indicator.note.high") },
-    { title: t("indicator.coverage"), value: `${trainingCoverage}%`, note: t("indicator.note.coverage") },
-    { title: t("indicator.automation"), value: `${automationService?.progress || 0}%`, note: t("indicator.note.automation") },
-    { title: t("indicator.ai"), value: `${aiService?.progress || 0}%`, note: t("indicator.note.ai") },
+    { title: t("indicator.critical"), value: formatNumber(openCritical), note: t("indicator.note.critical") },
+    { title: t("indicator.high"), value: formatNumber(openHigh), note: t("indicator.note.high") },
+    { title: t("indicator.coverage"), value: formatPercent(trainingCoverage), note: t("indicator.note.coverage") },
+    {
+      title: t("indicator.automation"),
+      value: formatPercent(automationService?.progress || 0),
+      note: t("indicator.note.automation")
+    },
+    { title: t("indicator.ai"), value: formatPercent(aiService?.progress || 0), note: t("indicator.note.ai") },
     {
       title: t("indicator.cyber"),
-      value: `${appState.services.find(service => service.key === "cyber")?.risk || 0}/100`,
+      value: `${formatNumber(appState.services.find(service => service.key === "cyber")?.risk || 0)}/100`,
       note: t("indicator.note.cyber")
     }
   ];
@@ -508,9 +555,11 @@ function buildActionQueue() {
     .map(service => t("queue.action.reduceRisk", { service: t(`service.${service.key}`).toLowerCase() }));
 
   const actions = [
-    appState.audits.length ? t("queue.action.close", { count: Math.min(3, appState.audits.length) }) : t("queue.action.launch"),
+    appState.audits.length
+      ? t("queue.action.close", { count: formatNumber(Math.min(3, appState.audits.length)) })
+      : t("queue.action.launch"),
     appState.trainings.length
-      ? t("queue.action.increase", { count: appState.trainings.length })
+      ? t("queue.action.increase", { count: formatNumber(appState.trainings.length) })
       : t("queue.action.startTraining"),
     ...topRiskServices,
     t("queue.action.publish")
@@ -520,7 +569,7 @@ function buildActionQueue() {
 
 function renderAll() {
   const readiness = computeReadiness();
-  el.readinessScore.textContent = `${readiness}%`;
+  el.readinessScore.textContent = formatPercent(readiness);
   el.readinessCaption.textContent = readiness >= 70 ? t("status.readyHigh") : t("status.readyLow");
   renderKpis();
   renderServices();
@@ -558,7 +607,7 @@ function renderServices() {
             <span class="badge ${badgeClass}">${badgeLabel}</span>
           </div>
           <p class="muted">${t(`service.detail.${service.key}`)}</p>
-          <p><strong>${t("list.progress")}:</strong> ${service.progress}% &nbsp; | &nbsp; <strong>${t("list.risk")}:</strong> ${service.risk}/100</p>
+          <p><strong>${t("list.progress")}:</strong> ${formatPercent(service.progress)} &nbsp; | &nbsp; <strong>${t("list.risk")}:</strong> ${formatNumber(service.risk)}/100</p>
         </article>
       `;
     })
@@ -583,7 +632,7 @@ function renderAudits() {
           <span class="badge ${severityToBadge(item.severity)}">${translateSeverity(item.severity)}</span>
         </div>
         <p>${item.finding}</p>
-        <p class="muted">${t("list.owner")}: ${item.owner} | ${t("list.due")}: ${item.dueDate} | ${t("list.status")}: ${translateAuditStatus(item.status)}</p>
+        <p class="muted">${t("list.owner")}: ${item.owner} | ${t("list.due")}: ${formatDate(item.dueDate)} | ${t("list.status")}: ${translateAuditStatus(item.status)}</p>
       </article>
     `
     )
@@ -605,7 +654,7 @@ function renderTrainings() {
           <span class="badge badge--low">${translateTrainingMode(item.mode)}</span>
         </div>
         <p>${item.objective}</p>
-        <p class="muted">${t("list.audience")}: ${item.audience} | ${t("list.target")}: ${target}%</p>
+        <p class="muted">${t("list.audience")}: ${item.audience} | ${t("list.target")}: ${formatPercent(target)}</p>
       </article>
     `;
     })
@@ -626,7 +675,7 @@ function renderDocuments() {
           <button class="btn btn--secondary document-download-btn" data-document-id="${escapeHtml(item.id)}" data-file-name="${escapeHtml(item.fileName)}">${t("list.download")}</button>
         </div>
         <p class="muted">${escapeHtml(item.fileName)}</p>
-        <p class="muted">${t("list.documentCategory")}: ${escapeHtml(item.category)} | ${t("list.documentSize")}: ${formatBytes(item.sizeBytes)} | ${t("list.documentDate")}: ${new Date(item.uploadedAt).toLocaleString()}</p>
+        <p class="muted">${t("list.documentCategory")}: ${escapeHtml(item.category)} | ${t("list.documentSize")}: ${formatBytes(item.sizeBytes)} | ${t("list.documentDate")}: ${formatDateTime(item.uploadedAt)}</p>
       </article>
     `
     )
@@ -668,7 +717,10 @@ function populateWorkflowSelects() {
   if (el.runSelect) {
     el.runSelect.innerHTML =
       appState.workflowRuns
-        .map(run => `<option value="${escapeHtml(run.id)}">${escapeHtml(run.id)} - ${escapeHtml(run.status)}</option>`)
+        .map(
+          run =>
+            `<option value="${escapeHtml(run.id)}">${escapeHtml(run.id)} - ${translateWorkflowRunStatus(run.status)}</option>`
+        )
         .join("") || `<option value="">${t("docOps.workflow.noRun")}</option>`;
   }
 }
@@ -693,7 +745,7 @@ function renderOcrResults() {
       <article class="list-item">
         <div class="item-head">
           <strong>${t("docOps.ocr.resultTitle")}</strong>
-          <span class="badge badge--low">${result.ocr.confidence}%</span>
+          <span class="badge badge--low">${formatPercent(result.ocr.confidence)}</span>
         </div>
         <p><strong>${t("docOps.ocr.engine")}:</strong> ${escapeHtml(result.ocr.engine)}</p>
         <p><strong>${t("docOps.ocr.route")}:</strong> ${t(DOC_OP_DEPARTMENTS[result.routing.department] || result.routing.department)}</p>
@@ -714,7 +766,7 @@ function renderOcrResults() {
       record => `
       <article class="list-item">
         <p><strong>${t("docOps.common.document")}:</strong> ${escapeHtml(record.documentId)} | <strong>${t("docOps.ocr.route")}:</strong> ${t(DOC_OP_DEPARTMENTS[record.routedDepartment] || record.routedDepartment)}</p>
-        <p class="muted">${new Date(record.processedAt).toLocaleString()} | ${record.ocrConfidence}%</p>
+        <p class="muted">${formatDateTime(record.processedAt)} | ${formatPercent(record.ocrConfidence)}</p>
       </article>
     `
     )
@@ -754,10 +806,10 @@ function renderWorkflowRuns() {
       <article class="list-item">
         <div class="item-head">
           <strong>${escapeHtml(run.id)}</strong>
-          <span class="badge ${run.status === "Approved" ? "badge--low" : run.status === "Rejected" ? "badge--high" : "badge--medium"}">${escapeHtml(run.status)}</span>
+          <span class="badge ${run.status === "Approved" ? "badge--low" : run.status === "Rejected" ? "badge--high" : "badge--medium"}">${translateWorkflowRunStatus(run.status)}</span>
         </div>
         <p>${t("docOps.workflow.stepProgress", { index: run.currentStepIndex + 1, total: run.steps.length })}</p>
-        <p class="muted">${run.steps.map(step => `${escapeHtml(step.name)}: ${escapeHtml(step.status)}`).join(" | ")}</p>
+        <p class="muted">${run.steps.map(step => `${escapeHtml(step.name)}: ${translateWorkflowStepStatus(step.status)}`).join(" | ")}</p>
       </article>
     `
     )
@@ -808,7 +860,7 @@ function renderComments() {
       comment => `
       <article class="list-item">
         <p>${escapeHtml(comment.message)}</p>
-        <p class="muted">${new Date(comment.createdAt).toLocaleString()}</p>
+        <p class="muted">${formatDateTime(comment.createdAt)}</p>
       </article>
     `
     )
@@ -827,10 +879,10 @@ function renderAuditTrail() {
       event => `
       <article class="list-item">
         <div class="item-head">
-          <strong>${escapeHtml(event.action)}</strong>
+          <strong>${translateEventAction(event.action)}</strong>
           <span class="badge badge--medium">${escapeHtml(event.actorId)}</span>
         </div>
-        <p class="muted">${new Date(event.createdAt).toLocaleString()}</p>
+        <p class="muted">${formatDateTime(event.createdAt)}</p>
       </article>
     `
     )
@@ -844,11 +896,11 @@ function renderAnalytics() {
     return;
   }
   const cards = [
-    { label: t("docOps.analytics.ocr"), value: `${appState.analytics.ocr.averageConfidence}%` },
-    { label: t("docOps.analytics.routed"), value: String(appState.analytics.routing.totalRouted) },
-    { label: t("docOps.analytics.workflow"), value: `${appState.analytics.workflow.automationRatePercent}%` },
-    { label: t("docOps.analytics.collab"), value: String(appState.analytics.collaboration.comments) },
-    { label: t("docOps.analytics.efficiency"), value: `${appState.analytics.efficiency.averageProcessingTimeSeconds}s` },
+    { label: t("docOps.analytics.ocr"), value: formatPercent(appState.analytics.ocr.averageConfidence) },
+    { label: t("docOps.analytics.routed"), value: formatNumber(appState.analytics.routing.totalRouted) },
+    { label: t("docOps.analytics.workflow"), value: formatPercent(appState.analytics.workflow.automationRatePercent) },
+    { label: t("docOps.analytics.collab"), value: formatNumber(appState.analytics.collaboration.comments) },
+    { label: t("docOps.analytics.efficiency"), value: `${formatDecimal(appState.analytics.efficiency.averageProcessingTimeSeconds)}s` },
     { label: t("docOps.analytics.security"), value: appState.analytics.security.encryptionAtRest }
   ];
   el.analyticsGrid.innerHTML = cards
