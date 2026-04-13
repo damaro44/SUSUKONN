@@ -1,7 +1,23 @@
 import { I18N, PERMISSION_KEYS, SECTOR_TAG_KEYS } from "./i18n.js";
 
 const STORAGE_KEY = "eclair-tech-assistance-v5";
-const DEFAULT_API_BASE_URL = "http://localhost:4100/v1";
+
+function isLocalHostname(hostname) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0";
+}
+
+function resolveDefaultApiBaseUrl() {
+  if (typeof window === "undefined") {
+    return "http://localhost:4100/v1";
+  }
+  const { protocol, hostname, origin } = window.location;
+  if (protocol.startsWith("http") && !isLocalHostname(hostname)) {
+    return `${origin}/v1`;
+  }
+  return "http://localhost:4100/v1";
+}
+
+const DEFAULT_API_BASE_URL = resolveDefaultApiBaseUrl();
 
 const ROLE_PERMISSIONS = {
   super_admin: [
@@ -275,6 +291,17 @@ function hydrateState() {
     if (parsed.migrationDashboard) appState.migrationDashboard = parsed.migrationDashboard;
     if (parsed.dashboard) appState.dashboard = parsed.dashboard;
     if (Array.isArray(parsed.services) && parsed.services.length === 6) appState.services = parsed.services;
+
+    // In public preview environments, force old localhost API values
+    // to the same-origin proxy so signup/login do not fail with fetch errors.
+    if (
+      typeof window !== "undefined" &&
+      window.location.protocol.startsWith("http") &&
+      !isLocalHostname(window.location.hostname) &&
+      /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?\/v1$/i.test(appState.apiBaseUrl)
+    ) {
+      appState.apiBaseUrl = `${window.location.origin}/v1`;
+    }
   } catch (error) {
     console.error("Failed to restore local state", error);
   }
