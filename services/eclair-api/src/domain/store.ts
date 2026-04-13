@@ -14,6 +14,8 @@ import type {
   DocumentRecord,
   DocumentVersion,
   EncryptedPayload,
+  RecordsMigrationBatch,
+  RecordsMigrationProject,
   TrainingPlan,
   UserRecord,
   WorkflowRun,
@@ -195,6 +197,48 @@ export const documentVersions: DocumentVersion[] = [
 export const auditTrailEvents: AuditTrailEvent[] = [
   auditEvent("DOCUMENT_UPLOADED", "u-compliance", "doc-1", { category: "compliance_evidence", version: 1 }),
   auditEvent("OCR_PROCESSED", "u-compliance", "doc-1", { confidence: 99.9, department: "compliance" })
+];
+
+export const recordsMigrationProjects: RecordsMigrationProject[] = [
+  {
+    id: "migration-project-1",
+    name: "National Civil Registry Backfile Digitization",
+    industry: "government",
+    organization: "Ministry of Public Service",
+    description: "Digitize 1980-2010 civil registry paper books with retention-aware indexing.",
+    retentionYears: 25,
+    securityClassification: "Confidential",
+    status: "In Progress",
+    createdAt: now(),
+    createdBy: "u-admin"
+  },
+  {
+    id: "migration-project-2",
+    name: "Archived Incident Ledger Preservation",
+    industry: "law_enforcement",
+    organization: "National Police Records Bureau",
+    description: "Convert historical incident ledgers and custody forms to secure digital records.",
+    retentionYears: 20,
+    securityClassification: "Restricted",
+    status: "Planning",
+    createdAt: now(),
+    createdBy: "u-compliance"
+  }
+];
+
+export const recordsMigrationBatches: RecordsMigrationBatch[] = [
+  {
+    id: "migration-batch-1",
+    projectId: "migration-project-1",
+    sourceType: "Paper",
+    historicalRecordCount: 1200,
+    digitizedRecordCount: 860,
+    qualityScore: 98.7,
+    encryptedAtRest: true,
+    backupVerifiedAt: now(),
+    createdAt: now(),
+    createdBy: "u-admin"
+  }
 ];
 
 export const departmentRoutingKeywords: Record<Department, string[]> = {

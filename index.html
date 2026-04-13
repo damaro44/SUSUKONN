@@ -404,6 +404,125 @@
 
       <section class="panel panel--stacked">
         <div class="panel__header">
+          <h2 data-i18n="migration.title">Digital Records Migration</h2>
+          <p class="muted" data-i18n="migration.subtitle">
+            Launch secure migration projects for government, law enforcement, hospitals, and education to digitize historical paper records.
+          </p>
+          <p class="muted small hidden" id="migration-rbac-note"></p>
+        </div>
+        <div class="split-grid">
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="migration.projectForm.title">Create migration project</h3>
+              <p class="muted" data-i18n="migration.projectForm.subtitle">
+                Define industry, retention, and classification rules before ingesting records.
+              </p>
+            </div>
+            <form id="migration-project-form" class="form-grid compact">
+              <label>
+                <span data-i18n="migration.projectForm.name">Project Name</span>
+                <input
+                  name="name"
+                  required
+                  placeholder="e.g. Historical Patient Archive Migration"
+                  data-i18n-placeholder="migration.projectForm.namePlaceholder"
+                />
+              </label>
+              <label>
+                <span data-i18n="migration.projectForm.industry">Industry</span>
+                <select name="industry" required>
+                  <option value="government" data-i18n="migration.industry.government">Government</option>
+                  <option value="law_enforcement" data-i18n="migration.industry.law_enforcement">Law Enforcement</option>
+                  <option value="hospitals" data-i18n="migration.industry.hospitals">Hospitals</option>
+                  <option value="education" data-i18n="migration.industry.education">Education</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="migration.projectForm.organization">Organization</span>
+                <input
+                  name="organization"
+                  required
+                  placeholder="e.g. National Referral Hospital"
+                  data-i18n-placeholder="migration.projectForm.organizationPlaceholder"
+                />
+              </label>
+              <label>
+                <span data-i18n="migration.projectForm.retention">Retention (years)</span>
+                <input name="retentionYears" type="number" min="1" max="100" required />
+              </label>
+              <label>
+                <span data-i18n="migration.projectForm.classification">Security Classification</span>
+                <select name="securityClassification" required>
+                  <option value="Standard" data-i18n="migration.classification.Standard">Standard</option>
+                  <option value="Restricted" data-i18n="migration.classification.Restricted">Restricted</option>
+                  <option value="Confidential" data-i18n="migration.classification.Confidential">Confidential</option>
+                </select>
+              </label>
+              <label class="full">
+                <span data-i18n="migration.projectForm.description">Project Description</span>
+                <textarea
+                  name="description"
+                  rows="2"
+                  required
+                  placeholder="Describe historical records, indexing, and compliance context."
+                  data-i18n-placeholder="migration.projectForm.descriptionPlaceholder"
+                ></textarea>
+              </label>
+              <button class="btn btn--secondary" type="submit" data-i18n="migration.projectForm.createButton">
+                Create migration project
+              </button>
+            </form>
+          </section>
+
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="migration.batchForm.title">Ingest historical batch</h3>
+              <p class="muted" data-i18n="migration.batchForm.subtitle">
+                Track digitized records, quality score, encryption, and backup verification.
+              </p>
+            </div>
+            <form id="migration-batch-form" class="form-grid compact">
+              <label>
+                <span data-i18n="migration.batchForm.project">Project</span>
+                <select id="migration-batch-project" name="projectId" required></select>
+              </label>
+              <label>
+                <span data-i18n="migration.batchForm.sourceType">Source Type</span>
+                <select name="sourceType" required>
+                  <option value="Paper" data-i18n="migration.sourceType.Paper">Paper</option>
+                  <option value="Microfilm" data-i18n="migration.sourceType.Microfilm">Microfilm</option>
+                  <option value="Mixed" data-i18n="migration.sourceType.Mixed">Mixed</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="migration.batchForm.historicalCount">Historical Records</span>
+                <input name="historicalRecordCount" type="number" min="1" required />
+              </label>
+              <label>
+                <span data-i18n="migration.batchForm.digitizedCount">Digitized Records</span>
+                <input name="digitizedRecordCount" type="number" min="0" required />
+              </label>
+              <label>
+                <span data-i18n="migration.batchForm.qualityScore">Quality Score</span>
+                <input name="qualityScore" type="number" min="0" max="99.9" step="0.1" required />
+              </label>
+              <button class="btn btn--primary" type="submit" data-i18n="migration.batchForm.ingestButton">
+                Ingest batch
+              </button>
+            </form>
+          </section>
+        </div>
+
+        <div id="migration-dashboard-grid" class="kpi-grid"></div>
+        <div id="migration-industry-grid" class="indicator-grid"></div>
+        <div class="split-grid">
+          <div id="migration-projects-list" class="list"></div>
+          <div id="migration-batches-list" class="list"></div>
+        </div>
+      </section>
+
+      <section class="panel panel--stacked">
+        <div class="panel__header">
           <h2 data-i18n="docOps.title">AI-Powered Document Operations</h2>
           <p class="muted" data-i18n="docOps.subtitle">
             OCR extraction, intelligent routing, workflow automation, collaboration, and analytics.

@@ -376,6 +376,10 @@ textarea:focus {
   font-weight: 700;
 }
 
+.migration-kpi .value {
+  font-size: 1.25rem;
+}
+
 .service-card,
 .list-item {
   padding: 0.72rem;

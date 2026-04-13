@@ -13,7 +13,8 @@ const ROLE_PERMISSIONS = {
     "processDocuments",
     "manageWorkflows",
     "collaborate",
-    "viewAnalytics"
+    "viewAnalytics",
+    "migrateRecords"
   ],
   compliance_officer: [
     "refresh",
@@ -24,7 +25,8 @@ const ROLE_PERMISSIONS = {
     "processDocuments",
     "manageWorkflows",
     "collaborate",
-    "viewAnalytics"
+    "viewAnalytics",
+    "migrateRecords"
   ],
   auditor: ["refresh", "downloadReports", "processDocuments", "collaborate", "viewAnalytics"],
   training_manager: [
@@ -33,7 +35,8 @@ const ROLE_PERMISSIONS = {
     "uploadDocuments",
     "manageWorkflows",
     "collaborate",
-    "viewAnalytics"
+    "viewAnalytics",
+    "migrateRecords"
   ]
 };
 
@@ -61,6 +64,9 @@ const appState = {
   comments: [],
   auditTrail: [],
   analytics: null,
+  migrationProjects: [],
+  migrationBatches: [],
+  migrationDashboard: null,
   latestOcrResult: null,
   selectedDocId: "",
   dashboard: null,
@@ -124,6 +130,14 @@ const el = {
   runSelect: document.getElementById("workflow-run-select"),
   auditRbacNote: document.getElementById("audit-rbac-note"),
   trainingRbacNote: document.getElementById("training-rbac-note"),
+  migrationProjectForm: document.getElementById("migration-project-form"),
+  migrationBatchForm: document.getElementById("migration-batch-form"),
+  migrationRbacNote: document.getElementById("migration-rbac-note"),
+  migrationBatchProject: document.getElementById("migration-batch-project"),
+  migrationDashboardGrid: document.getElementById("migration-dashboard-grid"),
+  migrationIndustryGrid: document.getElementById("migration-industry-grid"),
+  migrationProjectsList: document.getElementById("migration-projects-list"),
+  migrationBatchesList: document.getElementById("migration-batches-list"),
   readinessScore: document.getElementById("readiness-score"),
   readinessCaption: document.getElementById("readiness-caption"),
   toastRoot: document.getElementById("toast-root"),
@@ -179,6 +193,12 @@ function formatPercent(value) {
   return `${formatNumber(number, { maximumFractionDigits: 1 })}%`;
 }
 
+function formatDecimal(value, digits = 1) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "0";
+  return formatNumber(number, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
 function formatDateTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value ?? "");
@@ -201,6 +221,14 @@ function translateWorkflowStepStatus(status) {
 
 function translateEventAction(action) {
   return t(`eventAction.${action}`);
+}
+
+function translateMigrationIndustry(industry) {
+  return t(`migration.industry.${industry}`);
+}
+
+function translateMigrationStatus(status) {
+  return t(`migration.status.${status}`);
 }
 
 function escapeHtml(value) {
@@ -242,6 +270,9 @@ function hydrateState() {
     if (Array.isArray(parsed.audits)) appState.audits = parsed.audits;
     if (Array.isArray(parsed.trainings)) appState.trainings = parsed.trainings;
     if (Array.isArray(parsed.documents)) appState.documents = parsed.documents;
+    if (Array.isArray(parsed.migrationProjects)) appState.migrationProjects = parsed.migrationProjects;
+    if (Array.isArray(parsed.migrationBatches)) appState.migrationBatches = parsed.migrationBatches;
+    if (parsed.migrationDashboard) appState.migrationDashboard = parsed.migrationDashboard;
     if (parsed.dashboard) appState.dashboard = parsed.dashboard;
     if (Array.isArray(parsed.services) && parsed.services.length === 6) appState.services = parsed.services;
   } catch (error) {
@@ -261,6 +292,9 @@ function persistState() {
       audits: appState.audits,
       trainings: appState.trainings,
       documents: appState.documents,
+      migrationProjects: appState.migrationProjects,
+      migrationBatches: appState.migrationBatches,
+      migrationDashboard: appState.migrationDashboard,
       dashboard: appState.dashboard,
       services: appState.services
     })
@@ -343,6 +377,8 @@ function updateAuthUi() {
     setSectionPermission(el.trainingForm, el.trainingRbacNote, false, t("rbac.signInCreateTraining"), false);
     setSectionPermission(el.documentUploadForm, el.documentsRbacNote, false, t("rbac.signInUploadDocuments"), false);
     setSectionPermission(el.workflowTemplateForm, el.workflowRbacNote, false, t("rbac.signInManageWorkflows"), false);
+    setSectionPermission(el.migrationProjectForm, el.migrationRbacNote, false, t("rbac.signInMigrateRecords"), false);
+    setSectionPermission(el.migrationBatchForm, el.migrationRbacNote, false, t("rbac.signInMigrateRecords"), false);
     toggleReportPermission(false, t("rbac.signInExport"), false);
     el.authStatus.textContent = t("status.notAuthenticated");
     renderCapabilities();
@@ -358,6 +394,7 @@ function updateAuthUi() {
   const canProcessDocuments = hasPermission("processDocuments");
   const canCollaborate = hasPermission("collaborate");
   const canViewAnalytics = hasPermission("viewAnalytics");
+  const canMigrateRecords = hasPermission("migrateRecords");
 
   el.refreshLiveData.disabled = !canRefresh;
   el.downloadCsv.disabled = !canDownloadReports;
@@ -373,6 +410,8 @@ function updateAuthUi() {
   setSectionPermission(el.trainingForm, el.trainingRbacNote, canCreateTraining, t("rbac.noCreateTraining"));
   setSectionPermission(el.documentUploadForm, el.documentsRbacNote, canUploadDocuments, t("rbac.noUploadDocuments"));
   setSectionPermission(el.workflowTemplateForm, el.workflowRbacNote, canManageWorkflows, t("rbac.noManageWorkflows"));
+  setSectionPermission(el.migrationProjectForm, el.migrationRbacNote, canMigrateRecords, t("rbac.noMigrateRecords"));
+  setSectionPermission(el.migrationBatchForm, el.migrationRbacNote, canMigrateRecords, t("rbac.noMigrateRecords"));
   toggleReportPermission(canDownloadReports, t("rbac.noExport"));
 
   el.authStatus.textContent = t("status.authenticated", {
@@ -421,6 +460,21 @@ function parseWorkflowSteps(raw) {
     .filter(Boolean);
 }
 
+async function refreshMigrationData(showToast = false) {
+  if (!appState.auth.token) return;
+  const [projectsResult, batchesResult, dashboardResult] = await Promise.all([
+    apiFetch("/records-migration/projects"),
+    apiFetch("/records-migration/batches"),
+    apiFetch("/records-migration/dashboard")
+  ]);
+  appState.migrationProjects = projectsResult.data || [];
+  appState.migrationBatches = batchesResult.data || [];
+  appState.migrationDashboard = dashboardResult.data || null;
+  populateMigrationProjectSelect();
+  renderMigrationPanel();
+  if (showToast) toast(t("toast.migrationRefreshed"), "success");
+}
+
 async function refreshLiveData(showToast = true) {
   ensureAuthed();
   const [dashboardResult, auditsResult, trainingsResult, documentsResult] = await Promise.all([
@@ -441,6 +495,7 @@ async function refreshLiveData(showToast = true) {
   mapServicesFromLiveData();
   persistState();
   await refreshIntelligenceData(false);
+  await refreshMigrationData(false);
   renderAll();
   if (showToast) toast(t("toast.liveRefreshed"), "success");
 }
@@ -569,14 +624,19 @@ function buildActionQueue() {
 
 function renderAll() {
   const readiness = computeReadiness();
-  el.readinessScore.textContent = formatPercent(readiness);
-  el.readinessCaption.textContent = readiness >= 70 ? t("status.readyHigh") : t("status.readyLow");
+  if (el.readinessScore) {
+    el.readinessScore.textContent = formatPercent(readiness);
+  }
+  if (el.readinessCaption) {
+    el.readinessCaption.textContent = readiness >= 70 ? t("status.readyHigh") : t("status.readyLow");
+  }
   renderKpis();
   renderServices();
   renderActionQueue();
   renderAudits();
   renderTrainings();
   renderDocuments();
+  renderMigrationPanel();
   renderIndicators();
   renderIntelligencePanel();
   renderTags();
@@ -694,6 +754,111 @@ function renderIndicators() {
     `
     )
     .join("");
+}
+
+function populateMigrationProjectSelect() {
+  if (!el.migrationBatchProject) return;
+  const options = appState.migrationProjects
+    .map(
+      project =>
+        `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name)} (${translateMigrationIndustry(project.industry)})</option>`
+    )
+    .join("");
+  el.migrationBatchProject.innerHTML = options || `<option value="">${t("migration.batchForm.noProjectOption")}</option>`;
+}
+
+function renderMigrationPanel() {
+  if (!el.migrationDashboardGrid || !el.migrationIndustryGrid || !el.migrationProjectsList || !el.migrationBatchesList) {
+    return;
+  }
+
+  if (!appState.migrationDashboard) {
+    el.migrationDashboardGrid.innerHTML = `<p class="muted">${t("migration.emptyDashboard")}</p>`;
+    el.migrationIndustryGrid.innerHTML = `<p class="muted">${t("migration.emptyDashboard")}</p>`;
+    el.migrationProjectsList.innerHTML = `<p class="muted">${t("migration.emptyProjects")}</p>`;
+    el.migrationBatchesList.innerHTML = `<p class="muted">${t("migration.emptyBatches")}</p>`;
+    return;
+  }
+
+  const totals = appState.migrationDashboard.totals || {};
+  const quality = appState.migrationDashboard.quality || {};
+  const security = appState.migrationDashboard.security || {};
+  const byIndustry = appState.migrationDashboard.byIndustry || {};
+  const dashboardCards = [
+    { label: t("migration.metrics.projects"), value: formatNumber(totals.projects || 0) },
+    { label: t("migration.metrics.historical"), value: formatNumber(totals.historicalRecords || 0) },
+    { label: t("migration.metrics.digitized"), value: formatNumber(totals.digitizedRecords || 0) },
+    { label: t("migration.metrics.completion"), value: formatPercent(totals.completionPercent || 0) },
+    { label: t("migration.metrics.quality"), value: formatDecimal(quality.averageScore || 0) },
+    { label: t("migration.metrics.encryption"), value: formatPercent(security.encryptedBatchRatePercent || 0) }
+  ];
+  el.migrationDashboardGrid.innerHTML = dashboardCards
+    .map(
+      card => `
+      <article class="kpi">
+        <h3>${card.label}</h3>
+        <div class="value">${escapeHtml(card.value)}</div>
+      </article>
+    `
+    )
+    .join("");
+
+  const industries = ["government", "law_enforcement", "hospitals", "education"];
+  el.migrationIndustryGrid.innerHTML = industries
+    .map(industry => {
+      const row = byIndustry[industry] || { projects: 0, historicalRecords: 0, digitizedRecords: 0 };
+      const completion =
+        row.historicalRecords > 0 ? formatPercent((row.digitizedRecords / row.historicalRecords) * 100) : "0%";
+      return `
+        <article class="indicator">
+          <h3>${translateMigrationIndustry(industry)}</h3>
+          <div class="value">${completion}</div>
+          <p class="muted">${t("migration.metrics.projects")}: ${formatNumber(row.projects)}</p>
+          <p class="muted">${t("migration.metrics.historical")}: ${formatNumber(row.historicalRecords)}</p>
+        </article>
+      `;
+    })
+    .join("");
+
+  if (!appState.migrationProjects.length) {
+    el.migrationProjectsList.innerHTML = `<p class="muted">${t("migration.emptyProjects")}</p>`;
+  } else {
+    el.migrationProjectsList.innerHTML = appState.migrationProjects
+      .map(
+        project => `
+      <article class="list-item">
+        <div class="item-head">
+          <strong>${escapeHtml(project.name)}</strong>
+          <span class="badge ${project.status === "Completed" ? "badge--low" : project.status === "In Progress" ? "badge--medium" : "badge--high"}">${translateMigrationStatus(project.status)}</span>
+        </div>
+        <p>${escapeHtml(project.organization)} - ${translateMigrationIndustry(project.industry)}</p>
+        <p class="muted">${t("migration.projectLabel.completion")}: ${formatPercent(project.completionPercent || 0)} | ${t("migration.projectLabel.retention")}: ${formatNumber(project.retentionYears || 0)} ${t("migration.units.years")}</p>
+        <p class="muted">${t("migration.projectLabel.classification")}: ${t(`migration.classification.${project.securityClassification || "Standard"}`)}</p>
+      </article>
+    `
+      )
+      .join("");
+  }
+
+  if (!appState.migrationBatches.length) {
+    el.migrationBatchesList.innerHTML = `<p class="muted">${t("migration.emptyBatches")}</p>`;
+  } else {
+    el.migrationBatchesList.innerHTML = appState.migrationBatches
+      .slice(0, 8)
+      .map(
+        batch => `
+      <article class="list-item">
+        <div class="item-head">
+          <strong>${t("migration.batchLabel.batchPrefix")} ${escapeHtml(batch.id)}</strong>
+          <span class="badge badge--low">${t(`migration.sourceType.${batch.sourceType || "Paper"}`)}</span>
+        </div>
+        <p class="muted">${t("migration.batchLabel.completion")}: ${formatPercent(batch.completionPercent || 0)} | ${t("migration.batchLabel.quality")}: ${formatDecimal(batch.qualityScore || 0)}</p>
+        <p class="muted">${t("migration.batchLabel.remaining")}: ${formatNumber(batch.remainingRecords || 0)} | ${t("migration.batchLabel.backup")}: ${formatDateTime(batch.backupVerifiedAt)}</p>
+      </article>
+    `
+      )
+      .join("");
+  }
 }
 
 function populateDocSelects() {
@@ -915,6 +1080,62 @@ function renderAnalytics() {
     .join("");
 }
 
+async function handleMigrationProjectSubmit(event) {
+  event.preventDefault();
+  ensureAuthed();
+  if (!hasPermission("migrateRecords")) throw new Error(t("error.noMigrateRecordsPermission"));
+  const formData = new FormData(event.currentTarget);
+  const payload = {
+    name: formData.get("name")?.toString().trim(),
+    industry: formData.get("industry")?.toString(),
+    organization: formData.get("organization")?.toString().trim(),
+    description: formData.get("description")?.toString().trim(),
+    retentionYears: Number(formData.get("retentionYears")),
+    securityClassification: formData.get("securityClassification")?.toString()
+  };
+  try {
+    await apiFetch("/records-migration/projects", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    event.currentTarget.reset();
+    await refreshMigrationData(false);
+    persistState();
+    renderMigrationPanel();
+    toast(t("toast.migrationProjectCreated"), "success");
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+async function handleMigrationBatchSubmit(event) {
+  event.preventDefault();
+  ensureAuthed();
+  if (!hasPermission("migrateRecords")) throw new Error(t("error.noMigrateRecordsPermission"));
+  const formData = new FormData(event.currentTarget);
+  const payload = {
+    projectId: formData.get("projectId")?.toString() || "",
+    sourceType: formData.get("sourceType")?.toString(),
+    historicalRecordCount: Number(formData.get("historicalRecordCount")),
+    digitizedRecordCount: Number(formData.get("digitizedRecordCount")),
+    qualityScore: Number(formData.get("qualityScore"))
+  };
+  if (!payload.projectId) throw new Error(t("error.migrationProjectRequired"));
+  try {
+    await apiFetch("/records-migration/batches", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    event.currentTarget.reset();
+    await refreshMigrationData(false);
+    persistState();
+    renderMigrationPanel();
+    toast(t("toast.migrationBatchIngested"), "success");
+  } catch (error) {
+    handleError(error);
+  }
+}
+
 async function downloadReport(format) {
   ensureAuthed();
   if (!hasPermission("downloadReports")) throw new Error(t("error.noReportPermission"));
@@ -1035,6 +1256,9 @@ function logoutLocal(message) {
   appState.audits = [];
   appState.trainings = [];
   appState.documents = [];
+  appState.migrationProjects = [];
+  appState.migrationBatches = [];
+  appState.migrationDashboard = null;
   appState.documentProcessing = [];
   appState.workflowTemplates = [];
   appState.workflowRuns = [];
@@ -1331,6 +1555,8 @@ function bindEvents() {
   el.auditForm.addEventListener("submit", handleAuditSubmit);
   el.trainingForm.addEventListener("submit", handleTrainingSubmit);
   el.documentUploadForm.addEventListener("submit", handleDocumentUploadSubmit);
+  el.migrationProjectForm?.addEventListener("submit", handleMigrationProjectSubmit);
+  el.migrationBatchForm?.addEventListener("submit", handleMigrationBatchSubmit);
   el.versionUploadForm?.addEventListener("submit", handleDocumentVersionSubmit);
   el.commentForm?.addEventListener("submit", handleCommentSubmit);
   el.workflowTemplateForm?.addEventListener("submit", handleWorkflowTemplateSubmit);

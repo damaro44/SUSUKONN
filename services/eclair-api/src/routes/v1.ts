@@ -92,6 +92,27 @@ const commentSchema = z.object({
   message: z.string().min(2).max(1000)
 });
 
+const migrationProjectSchema = z.object({
+  name: z.string().min(3),
+  industry: z.enum(["government", "law_enforcement", "hospitals", "education"]),
+  organization: z.string().min(2),
+  description: z.string().min(6),
+  retentionYears: z.number().int().min(1).max(100),
+  securityClassification: z.enum(["Standard", "Restricted", "Confidential"])
+});
+
+const migrationBatchSchema = z.object({
+  projectId: z.string().min(1),
+  sourceType: z.enum(["Paper", "Microfilm", "Mixed"]),
+  historicalRecordCount: z.number().int().min(1),
+  digitizedRecordCount: z.number().int().min(0),
+  qualityScore: z.number().min(0).max(99.9)
+});
+
+const migrationBatchQuerySchema = z.object({
+  projectId: z.string().min(1).optional()
+});
+
 function toPublicUser(user: { id: string; fullName: string; email: string; role: string }) {
   return {
     id: user.id,
@@ -350,6 +371,44 @@ v1Router.get("/collaboration/audit-trail", requireAuth, (request, response) => {
 
 v1Router.get("/analytics/documents", requireAuth, (request, response) => {
   response.json({ data: eclairService.documentOpsAnalytics() });
+});
+
+v1Router.get("/records-migration/projects", requireAuth, (_request, response) => {
+  response.json({ data: eclairService.listRecordsMigrationProjects() });
+});
+
+v1Router.post(
+  "/records-migration/projects",
+  requireAuth,
+  requireRole(["super_admin", "compliance_officer", "training_manager"]),
+  (request, response) => {
+    const payload = migrationProjectSchema.parse(request.body);
+    const data = eclairService.createRecordsMigrationProject(payload, request.authUser!.id);
+    response.status(201).json({ data });
+  }
+);
+
+v1Router.get("/records-migration/batches", requireAuth, (request, response) => {
+  const payload = migrationBatchQuerySchema.parse({
+    projectId: typeof request.query.projectId === "string" ? request.query.projectId : undefined
+  });
+  const data = eclairService.listRecordsMigrationBatches(payload.projectId);
+  response.json({ data });
+});
+
+v1Router.post(
+  "/records-migration/batches",
+  requireAuth,
+  requireRole(["super_admin", "compliance_officer", "training_manager"]),
+  (request, response) => {
+    const payload = migrationBatchSchema.parse(request.body);
+    const data = eclairService.createRecordsMigrationBatch(payload, request.authUser!.id);
+    response.status(201).json({ data });
+  }
+);
+
+v1Router.get("/records-migration/dashboard", requireAuth, (_request, response) => {
+  response.json({ data: eclairService.recordsMigrationDashboard() });
 });
 
 v1Router.get(

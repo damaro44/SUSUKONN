@@ -121,3 +121,31 @@ export interface AuditTrailEvent {
   metadata?: Record<string, string | number | boolean>;
   createdAt: string;
 }
+
+export type MigrationIndustry = "government" | "law_enforcement" | "hospitals" | "education";
+
+export interface RecordsMigrationProject {
+  id: string;
+  name: string;
+  industry: MigrationIndustry;
+  organization: string;
+  description: string;
+  retentionYears: number;
+  securityClassification: "Standard" | "Restricted" | "Confidential";
+  status: "Planning" | "In Progress" | "Completed";
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface RecordsMigrationBatch {
+  id: string;
+  projectId: string;
+  sourceType: "Paper" | "Microfilm" | "Mixed";
+  historicalRecordCount: number;
+  digitizedRecordCount: number;
+  qualityScore: number;
+  encryptedAtRest: boolean;
+  backupVerifiedAt: string;
+  createdAt: string;
+  createdBy: string;
+}

@@ -184,4 +184,56 @@ describe("Eclair API smoke", () => {
     expect(analytics.body.data.ocr.totalProcessed).toBeGreaterThan(0);
     expect(analytics.body.data.security.complianceFrameworks).toEqual(["HIPAA", "SOC 2", "GDPR"]);
   });
+
+  it("creates records migration projects and batches with dashboard metrics", async () => {
+    const token = await loginAs("compliance@eclair.tech", "Compliance@2026");
+
+    const project = await request(app)
+      .post("/v1/records-migration/projects")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        name: "Hospital Legacy Archive Program",
+        industry: "hospitals",
+        organization: "National Referral Hospital",
+        description: "Digitize legacy patient paper files and classify retention.",
+        retentionYears: 30,
+        securityClassification: "Confidential"
+      });
+    expect(project.status).toBe(201);
+    expect(project.body.data.industry).toBe("hospitals");
+    expect(project.body.data.status).toBe("Planning");
+    const projectId = project.body.data.id as string;
+
+    const batch = await request(app)
+      .post("/v1/records-migration/batches")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        projectId,
+        sourceType: "Paper",
+        historicalRecordCount: 500,
+        digitizedRecordCount: 320,
+        qualityScore: 99.2
+      });
+    expect(batch.status).toBe(201);
+    expect(batch.body.data.projectId).toBe(projectId);
+    expect(batch.body.data.completionPercent).toBeGreaterThan(60);
+
+    const projects = await request(app).get("/v1/records-migration/projects").set("Authorization", `Bearer ${token}`);
+    expect(projects.status).toBe(200);
+    expect(projects.body.data.some((item: { id: string }) => item.id === projectId)).toBe(true);
+
+    const dashboard = await request(app)
+      .get("/v1/records-migration/dashboard")
+      .set("Authorization", `Bearer ${token}`);
+    expect(dashboard.status).toBe(200);
+    expect(dashboard.body.data.totals.projects).toBeGreaterThan(0);
+    expect(dashboard.body.data.security.encryptionAtRest).toBe("AES-256-GCM");
+
+    const batches = await request(app)
+      .get(`/v1/records-migration/batches?projectId=${encodeURIComponent(projectId)}`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(batches.status).toBe(200);
+    expect(Array.isArray(batches.body.data)).toBe(true);
+    expect(batches.body.data[0].projectId).toBe(projectId);
+  });
 });

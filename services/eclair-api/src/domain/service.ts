@@ -9,6 +9,8 @@ import {
   documentRecords,
   documentVersions,
   encryptPlainText,
+  recordsMigrationBatches,
+  recordsMigrationProjects,
   trainingPlans,
   users,
   workflowRuns,
@@ -22,6 +24,9 @@ import type {
   DocumentProcessingRecord,
   DocumentRecord,
   DocumentVersion,
+  MigrationIndustry,
+  RecordsMigrationBatch,
+  RecordsMigrationProject,
   Role,
   TrainingPlan,
   UserRecord,
@@ -89,6 +94,23 @@ interface UploadDocumentVersionInput {
   mimeType: string;
   contentBase64: string;
   sourceText?: string;
+}
+
+interface CreateRecordsMigrationProjectInput {
+  name: string;
+  industry: MigrationIndustry;
+  organization: string;
+  description: string;
+  retentionYears: number;
+  securityClassification: "Standard" | "Restricted" | "Confidential";
+}
+
+interface CreateRecordsMigrationBatchInput {
+  projectId: string;
+  sourceType: "Paper" | "Microfilm" | "Mixed";
+  historicalRecordCount: number;
+  digitizedRecordCount: number;
+  qualityScore: number;
 }
 
 function normalizeEmail(email: string): string {
@@ -176,6 +198,31 @@ function getLatestDocumentVersion(documentId: string): DocumentVersion {
     throw new Error("Document version history is missing");
   }
   return versions[0];
+}
+
+function calculateMigrationCompletionPercent(historicalRecordCount: number, digitizedRecordCount: number): number {
+  if (historicalRecordCount <= 0) {
+    return 0;
+  }
+  return Number(Math.min(100, (digitizedRecordCount / historicalRecordCount) * 100).toFixed(1));
+}
+
+function toMigrationProjectSummary(project: RecordsMigrationProject) {
+  const batches = recordsMigrationBatches.filter(batch => batch.projectId === project.id);
+  const historicalRecords = batches.reduce((sum, batch) => sum + batch.historicalRecordCount, 0);
+  const digitizedRecords = batches.reduce((sum, batch) => sum + batch.digitizedRecordCount, 0);
+  const latestBackup = batches
+    .map(batch => batch.backupVerifiedAt)
+    .sort((a, b) => b.localeCompare(a))[0];
+
+  return {
+    ...project,
+    batchCount: batches.length,
+    historicalRecords,
+    digitizedRecords,
+    completionPercent: calculateMigrationCompletionPercent(historicalRecords, digitizedRecords),
+    latestBackupVerifiedAt: latestBackup ?? null
+  };
 }
 
 export const eclairService = {
@@ -652,6 +699,164 @@ export const eclairService = {
         averageProcessingTimeMs: avgProcessingTimeMs,
         averageProcessingTimeSeconds: Number((avgProcessingTimeMs / 1000).toFixed(2))
       }
+    };
+  },
+
+  listRecordsMigrationProjects() {
+    return [...recordsMigrationProjects]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(toMigrationProjectSummary);
+  },
+
+  createRecordsMigrationProject(input: CreateRecordsMigrationProjectInput, userId: string) {
+    const normalizedName = input.name.trim();
+    const normalizedOrganization = input.organization.trim();
+    const normalizedDescription = input.description.trim();
+    if (!normalizedName || !normalizedOrganization || !normalizedDescription) {
+      throw new Error("Migration project name, organization, and description are required");
+    }
+    const project: RecordsMigrationProject = {
+      id: randomUUID(),
+      name: normalizedName,
+      industry: input.industry,
+      organization: normalizedOrganization,
+      description: normalizedDescription,
+      retentionYears: input.retentionYears,
+      securityClassification: input.securityClassification,
+      status: "Planning",
+      createdAt: new Date().toISOString(),
+      createdBy: userId
+    };
+    recordsMigrationProjects.unshift(project);
+    pushAuditEvent({
+      action: "MIGRATION_PROJECT_CREATED",
+      actorId: userId,
+      metadata: {
+        projectId: project.id,
+        industry: project.industry,
+        classification: project.securityClassification
+      }
+    });
+    return toMigrationProjectSummary(project);
+  },
+
+  listRecordsMigrationBatches(projectId?: string) {
+    return recordsMigrationBatches
+      .filter(batch => !projectId || batch.projectId === projectId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(batch => ({
+        ...batch,
+        completionPercent: calculateMigrationCompletionPercent(
+          batch.historicalRecordCount,
+          batch.digitizedRecordCount
+        ),
+        remainingRecords: Math.max(0, batch.historicalRecordCount - batch.digitizedRecordCount)
+      }));
+  },
+
+  createRecordsMigrationBatch(input: CreateRecordsMigrationBatchInput, userId: string) {
+    const project = recordsMigrationProjects.find(item => item.id === input.projectId);
+    if (!project) {
+      throw new Error("Migration project not found");
+    }
+    if (input.digitizedRecordCount > input.historicalRecordCount) {
+      throw new Error("Digitized records cannot exceed historical records");
+    }
+    const batch: RecordsMigrationBatch = {
+      id: randomUUID(),
+      projectId: project.id,
+      sourceType: input.sourceType,
+      historicalRecordCount: input.historicalRecordCount,
+      digitizedRecordCount: input.digitizedRecordCount,
+      qualityScore: input.qualityScore,
+      encryptedAtRest: true,
+      backupVerifiedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      createdBy: userId
+    };
+    recordsMigrationBatches.unshift(batch);
+
+    const projectBatches = recordsMigrationBatches.filter(item => item.projectId === project.id);
+    const allDigitized = projectBatches.reduce((sum, item) => sum + item.digitizedRecordCount, 0);
+    const allHistorical = projectBatches.reduce((sum, item) => sum + item.historicalRecordCount, 0);
+    const completionPercent = calculateMigrationCompletionPercent(allHistorical, allDigitized);
+    project.status = completionPercent >= 100 ? "Completed" : "In Progress";
+
+    pushAuditEvent({
+      action: "MIGRATION_BATCH_INGESTED",
+      actorId: userId,
+      metadata: {
+        projectId: project.id,
+        sourceType: batch.sourceType,
+        historicalRecords: batch.historicalRecordCount,
+        digitizedRecords: batch.digitizedRecordCount
+      }
+    });
+
+    return {
+      ...batch,
+      completionPercent: calculateMigrationCompletionPercent(
+        batch.historicalRecordCount,
+        batch.digitizedRecordCount
+      ),
+      remainingRecords: Math.max(0, batch.historicalRecordCount - batch.digitizedRecordCount)
+    };
+  },
+
+  recordsMigrationDashboard() {
+    const projects = this.listRecordsMigrationProjects();
+    const batches = this.listRecordsMigrationBatches();
+    const totalHistoricalRecords = batches.reduce((sum, batch) => sum + batch.historicalRecordCount, 0);
+    const totalDigitizedRecords = batches.reduce((sum, batch) => sum + batch.digitizedRecordCount, 0);
+    const averageQualityScore = batches.length
+      ? Number((batches.reduce((sum, batch) => sum + batch.qualityScore, 0) / batches.length).toFixed(2))
+      : 0;
+    const encryptedBatches = batches.filter(batch => batch.encryptedAtRest).length;
+    const byIndustry = projects.reduce(
+      (accumulator, project) => {
+        const current = accumulator[project.industry] || {
+          projects: 0,
+          historicalRecords: 0,
+          digitizedRecords: 0
+        };
+        current.projects += 1;
+        current.historicalRecords += project.historicalRecords;
+        current.digitizedRecords += project.digitizedRecords;
+        accumulator[project.industry] = current;
+        return accumulator;
+      },
+      {} as Record<MigrationIndustry, { projects: number; historicalRecords: number; digitizedRecords: number }>
+    );
+
+    const classificationBreakdown = projects.reduce(
+      (accumulator, project) => {
+        accumulator[project.securityClassification] = (accumulator[project.securityClassification] || 0) + 1;
+        return accumulator;
+      },
+      {} as Record<string, number>
+    );
+
+    return {
+      totals: {
+        projects: projects.length,
+        batches: batches.length,
+        historicalRecords: totalHistoricalRecords,
+        digitizedRecords: totalDigitizedRecords,
+        completionPercent: calculateMigrationCompletionPercent(totalHistoricalRecords, totalDigitizedRecords)
+      },
+      quality: {
+        averageScore: averageQualityScore,
+        targetScore: 99.9
+      },
+      security: {
+        encryptionAtRest: "AES-256-GCM",
+        encryptedBatchRatePercent: batches.length ? Number(((encryptedBatches / batches.length) * 100).toFixed(1)) : 0,
+        backupCoveragePercent: batches.length
+          ? Number(((batches.filter(batch => Boolean(batch.backupVerifiedAt)).length / batches.length) * 100).toFixed(1))
+          : 0,
+        classificationBreakdown
+      },
+      byIndustry
     };
   },
 
