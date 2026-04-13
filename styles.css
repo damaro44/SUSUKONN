@@ -91,6 +91,29 @@ h1 {
   padding: 1rem;
 }
 
+.dashboard-shell {
+  max-width: 1160px;
+  margin: 1.2rem auto 0;
+  padding: 1rem;
+}
+
+.dashboard-shell__inner {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.dashboard-shell__actions {
+  display: grid;
+  gap: 0.65rem;
+  justify-items: end;
+}
+
+.dashboard-active .footer {
+  padding-top: 1rem;
+}
+
 .auth-form {
   margin-top: 0.7rem;
   display: grid;
@@ -463,6 +486,7 @@ textarea:focus {
 
 @media (max-width: 960px) {
   .hero__inner,
+  .dashboard-shell__inner,
   .split-grid,
   .docops-split,
   .kpi-grid,
@@ -471,5 +495,9 @@ textarea:focus {
   .form-grid.compact,
   .capabilities-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-shell__actions {
+    justify-items: stretch;
   }
 }

@@ -15,8 +15,9 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="hero">
-      <div class="hero__inner">
+    <section id="auth-view">
+      <header class="hero">
+        <div class="hero__inner">
         <div class="hero__branding">
           <p class="eyebrow" data-i18n="brand.eyebrow">Eclair Technology Assistance</p>
           <h1 data-i18n="brand.headline">
@@ -31,16 +32,16 @@
           <div class="hero__tags" id="sector-tags"></div>
         </div>
 
-        <aside class="hero__panel">
-          <div class="language-switcher">
-            <label>
-              <span data-i18n="language.label">Language</span>
-              <select id="language-select">
-                <option value="en">English</option>
-                <option value="fr">Francais</option>
-              </select>
-            </label>
-          </div>
+          <aside class="hero__panel">
+            <div class="language-switcher">
+              <label>
+                <span data-i18n="language.label">Language</span>
+                <select id="language-select">
+                  <option value="en">English</option>
+                  <option value="fr">Francais</option>
+                </select>
+              </label>
+            </div>
 
           <h2 data-i18n="auth.heading">Secure Backend Access</h2>
           <p class="muted" data-i18n="auth.summary">
@@ -63,29 +64,120 @@
             </button>
           </form>
 
-          <form id="login-form" class="auth-form">
+            <form id="login-form" class="auth-form">
+              <label class="signin-field">
+                <span data-i18n="auth.emailLabel">Work Email</span>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="admin@eclair.tech"
+                  data-i18n-placeholder="auth.emailPlaceholder"
+                  required
+                />
+              </label>
+              <label class="signin-field">
+                <span data-i18n="auth.passwordLabel">Password</span>
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="********"
+                  data-i18n-placeholder="auth.passwordPlaceholder"
+                  required
+                />
+              </label>
+              <button
+                class="btn btn--primary"
+                id="signin-btn"
+                type="submit"
+                data-i18n="auth.signInButton"
+              >
+                Sign in
+              </button>
+            </form>
+
+            <form id="register-form" class="auth-form">
+              <label>
+                <span data-i18n="auth.registerFullName">Full Name</span>
+                <input
+                  type="text"
+                  name="fullName"
+                  placeholder="e.g. Operations Manager"
+                  data-i18n-placeholder="auth.registerFullNamePlaceholder"
+                  required
+                />
+              </label>
+              <label>
+                <span data-i18n="auth.registerEmailLabel">Email</span>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="new.user@eclair.tech"
+                  data-i18n-placeholder="auth.registerEmailPlaceholder"
+                  required
+                />
+              </label>
+              <label>
+                <span data-i18n="auth.registerRoleLabel">Role</span>
+                <select name="role" required>
+                  <option value="" data-i18n="common.select">Select...</option>
+                  <option value="compliance_officer" data-i18n="role.compliance_officer">Compliance Officer</option>
+                  <option value="auditor" data-i18n="role.auditor">Auditor</option>
+                  <option value="training_manager" data-i18n="role.training_manager">Training Manager</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="auth.registerPasswordLabel">Password</span>
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="At least 8 chars"
+                  data-i18n-placeholder="auth.registerPasswordPlaceholder"
+                  required
+                />
+              </label>
+              <label>
+                <span data-i18n="auth.registerConfirmLabel">Confirm Password</span>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  placeholder="Repeat password"
+                  data-i18n-placeholder="auth.registerConfirmPlaceholder"
+                  required
+                />
+              </label>
+              <button class="btn btn--secondary" type="submit" data-i18n="auth.registerButton">
+                Sign up & continue
+              </button>
+            </form>
+
+            <p class="muted small" data-i18n="auth.dashboardRedirectHint">
+              Sign in or sign up to continue directly to your dashboard.
+            </p>
+          </aside>
+        </div>
+      </header>
+    </section>
+
+    <header id="dashboard-shell" class="dashboard-shell hidden">
+      <div class="dashboard-shell__inner">
+        <div>
+          <p class="eyebrow" data-i18n="brand.eyebrow">Eclair Technology Assistance</p>
+          <h2 data-i18n="dashboard.title">Operational Dashboard</h2>
+          <p class="muted" id="auth-status" data-i18n="auth.notAuthenticated">Not authenticated.</p>
+        </div>
+        <div class="dashboard-shell__actions">
+          <div class="language-switcher">
             <label>
-              <span data-i18n="auth.emailLabel">Work Email</span>
-              <input
-                type="email"
-                name="email"
-                placeholder="admin@eclair.tech"
-                data-i18n-placeholder="auth.emailPlaceholder"
-                required
-              />
+              <span data-i18n="language.label">Language</span>
+              <select id="dashboard-language-select">
+                <option value="en">English</option>
+                <option value="fr">Francais</option>
+              </select>
             </label>
-            <label>
-              <span data-i18n="auth.passwordLabel">Password</span>
-              <input
-                type="password"
-                name="password"
-                placeholder="********"
-                data-i18n-placeholder="auth.passwordPlaceholder"
-                required
-              />
-            </label>
-            <button class="btn btn--primary" type="submit" data-i18n="auth.signInButton">
-              Sign in
+          </div>
+          <div class="quick-actions">
+            <button class="btn btn--secondary" id="refresh-live-data" type="button" data-i18n="auth.refreshButton">
+              Refresh live data
             </button>
             <button
               class="btn btn--secondary"
@@ -95,82 +187,6 @@
               data-i18n="auth.signOutButton"
             >
               Sign out
-            </button>
-          </form>
-
-          <form id="register-form" class="auth-form">
-            <label>
-              <span data-i18n="auth.registerFullName">Full Name</span>
-              <input
-                type="text"
-                name="fullName"
-                placeholder="e.g. Operations Manager"
-                data-i18n-placeholder="auth.registerFullNamePlaceholder"
-                required
-              />
-            </label>
-            <label>
-              <span data-i18n="auth.registerEmailLabel">Email</span>
-              <input
-                type="email"
-                name="email"
-                placeholder="new.user@eclair.tech"
-                data-i18n-placeholder="auth.registerEmailPlaceholder"
-                required
-              />
-            </label>
-            <label>
-              <span data-i18n="auth.registerRoleLabel">Role</span>
-              <select name="role" required>
-                <option value="" data-i18n="common.select">Select...</option>
-                <option value="compliance_officer" data-i18n="role.compliance_officer">Compliance Officer</option>
-                <option value="auditor" data-i18n="role.auditor">Auditor</option>
-                <option value="training_manager" data-i18n="role.training_manager">Training Manager</option>
-              </select>
-            </label>
-            <label>
-              <span data-i18n="auth.registerPasswordLabel">Password</span>
-              <input
-                type="password"
-                name="password"
-                placeholder="At least 8 chars"
-                data-i18n-placeholder="auth.registerPasswordPlaceholder"
-                required
-              />
-            </label>
-            <label>
-              <span data-i18n="auth.registerConfirmLabel">Confirm Password</span>
-              <input
-                type="password"
-                name="confirmPassword"
-                placeholder="Repeat password"
-                data-i18n-placeholder="auth.registerConfirmPlaceholder"
-                required
-              />
-            </label>
-            <button class="btn btn--secondary" type="submit" data-i18n="auth.registerButton">Sign up & continue</button>
-          </form>
-
-          <p class="muted small" id="auth-status" data-i18n="auth.notAuthenticated">Not authenticated.</p>
-
-          <section id="capabilities-panel" class="capabilities hidden">
-            <h3 data-i18n="capabilities.title">Role Capabilities</h3>
-            <p class="muted small" id="capabilities-role"></p>
-            <div class="capabilities-grid">
-              <div>
-                <strong data-i18n="capabilities.allowed">Allowed</strong>
-                <ul id="capabilities-allowed"></ul>
-              </div>
-              <div>
-                <strong data-i18n="capabilities.restricted">Restricted</strong>
-                <ul id="capabilities-restricted"></ul>
-              </div>
-            </div>
-          </section>
-
-          <div class="quick-actions">
-            <button class="btn btn--secondary" id="refresh-live-data" type="button" data-i18n="auth.refreshButton">
-              Refresh live data
             </button>
           </div>
 
@@ -183,11 +199,26 @@
             </button>
           </div>
           <p class="muted small hidden" id="report-rbac-note"></p>
-        </aside>
+        </div>
       </div>
+
+      <section id="capabilities-panel" class="capabilities hidden">
+        <h3 data-i18n="capabilities.title">Role Capabilities</h3>
+        <p class="muted small" id="capabilities-role"></p>
+        <div class="capabilities-grid">
+          <div>
+            <strong data-i18n="capabilities.allowed">Allowed</strong>
+            <ul id="capabilities-allowed"></ul>
+          </div>
+          <div>
+            <strong data-i18n="capabilities.restricted">Restricted</strong>
+            <ul id="capabilities-restricted"></ul>
+          </div>
+        </div>
+      </section>
     </header>
 
-    <main class="container" id="app-main">
+    <main class="container hidden" id="app-main">
       <section class="panel">
         <div class="panel__header">
           <h2 data-i18n="overview.title">Program Overview</h2>

@@ -67,6 +67,7 @@ export const I18N = {
     "auth.registerConfirmLabel": "Confirm Password",
     "auth.registerConfirmPlaceholder": "Repeat password",
     "auth.registerButton": "Sign up & continue",
+    "auth.dashboardRedirectHint": "Sign in or sign up to continue directly to your dashboard.",
     "auth.refreshButton": "Refresh live data",
     "auth.downloadCsv": "Download CSV report",
     "auth.downloadPdf": "Download PDF report",
@@ -85,6 +86,7 @@ export const I18N = {
 
     "overview.title": "Program Overview",
     "overview.subtitle": "Cross-service KPIs aligned to national digital standards and PARAE priorities.",
+    "dashboard.title": "Operational Dashboard",
 
     "profile.title": "Institution Profile",
     "profile.subtitle": "Baseline context used by the AI planning engine.",
@@ -481,6 +483,7 @@ export const I18N = {
     "auth.registerConfirmLabel": "Confirmer le mot de passe",
     "auth.registerConfirmPlaceholder": "Repetez le mot de passe",
     "auth.registerButton": "S'inscrire et continuer",
+    "auth.dashboardRedirectHint": "Connectez-vous ou inscrivez-vous pour acceder directement a votre tableau de bord.",
     "auth.refreshButton": "Rafraichir les donnees",
     "auth.downloadCsv": "Telecharger le rapport CSV",
     "auth.downloadPdf": "Telecharger le rapport PDF",
@@ -499,6 +502,7 @@ export const I18N = {
 
     "overview.title": "Vue d'ensemble du programme",
     "overview.subtitle": "KPI transversaux alignes sur les normes numeriques nationales et les priorites PARAE.",
+    "dashboard.title": "Tableau de bord operationnel",
 
     "profile.title": "Profil de l'institution",
     "profile.subtitle": "Contexte de reference utilise par le moteur de planification IA.",

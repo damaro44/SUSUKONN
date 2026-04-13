@@ -97,7 +97,11 @@ const appState = {
 };
 
 const el = {
+  authView: document.getElementById("auth-view"),
+  dashboardShell: document.getElementById("dashboard-shell"),
+  appMain: document.getElementById("app-main"),
   languageSelect: document.getElementById("language-select"),
+  dashboardLanguageSelect: document.getElementById("dashboard-language-select"),
   connectionForm: document.getElementById("connection-form"),
   apiBaseUrl: document.getElementById("api-base-url"),
   loginForm: document.getElementById("login-form"),
@@ -159,6 +163,8 @@ const el = {
   toastRoot: document.getElementById("toast-root"),
   sectorTags: document.getElementById("sector-tags")
 };
+
+const DASHBOARD_SEGMENT = "dashboard";
 
 function t(key, vars = {}) {
   const dictionary = I18N[appState.language] || I18N.en;
@@ -345,12 +351,16 @@ function applyI18n() {
     if (key) node.setAttribute("placeholder", t(key));
   });
 
-  if (el.languageSelect) {
-    const options = Array.from(el.languageSelect.options);
+  const applyLanguageOptions = selectElement => {
+    if (!selectElement) return;
+    const options = Array.from(selectElement.options);
     if (options[0]) options[0].textContent = t("language.english");
     if (options[1]) options[1].textContent = t("language.french");
-    el.languageSelect.value = appState.language;
-  }
+    selectElement.value = appState.language;
+  };
+
+  applyLanguageOptions(el.languageSelect);
+  applyLanguageOptions(el.dashboardLanguageSelect);
 }
 
 function renderCapabilities() {
@@ -375,6 +385,51 @@ function syncConnectionFields() {
   el.apiBaseUrl.value = appState.apiBaseUrl;
 }
 
+function normalizePathname(pathname = "/") {
+  const trimmed = pathname.replace(/\/+$/, "");
+  return trimmed || "/";
+}
+
+function isDashboardPath(pathname = window.location.pathname) {
+  return normalizePathname(pathname).split("/").pop() === DASHBOARD_SEGMENT;
+}
+
+function dashboardPathFromPathname(pathname = window.location.pathname) {
+  const normalized = normalizePathname(pathname);
+  if (isDashboardPath(normalized)) return normalized;
+  return normalized === "/" ? `/${DASHBOARD_SEGMENT}` : `${normalized}/${DASHBOARD_SEGMENT}`;
+}
+
+function authPathFromPathname(pathname = window.location.pathname) {
+  const normalized = normalizePathname(pathname);
+  if (!isDashboardPath(normalized)) return normalized;
+  const withoutDashboard = normalized.replace(/\/dashboard$/, "");
+  return withoutDashboard || "/";
+}
+
+function navigateToDashboard(usePushState = false) {
+  if (typeof window === "undefined") return;
+  const targetPath = dashboardPathFromPathname();
+  if (normalizePathname(window.location.pathname) === targetPath) return;
+  const method = usePushState ? "pushState" : "replaceState";
+  window.history[method]({ view: "dashboard" }, "", targetPath);
+}
+
+function navigateToAuth(usePushState = false) {
+  if (typeof window === "undefined") return;
+  const targetPath = authPathFromPathname();
+  if (normalizePathname(window.location.pathname) === targetPath) return;
+  const method = usePushState ? "pushState" : "replaceState";
+  window.history[method]({ view: "auth" }, "", targetPath);
+}
+
+function updateViewForAuthState(isAuthed) {
+  el.authView?.classList.toggle("hidden", isAuthed);
+  el.dashboardShell?.classList.toggle("hidden", !isAuthed);
+  el.appMain?.classList.toggle("hidden", !isAuthed);
+  document.body.classList.toggle("dashboard-active", isAuthed);
+}
+
 function setSectionPermission(formElement, noteElement, isAllowed, message, showNote = true) {
   if (!formElement || !noteElement) return;
   const inputs = formElement.querySelectorAll("input, select, textarea, button");
@@ -394,6 +449,12 @@ function toggleReportPermission(isAllowed, message, showNote = true) {
 
 function updateAuthUi() {
   const authed = Boolean(appState.auth.token && appState.auth.user);
+  if (authed) {
+    navigateToDashboard();
+  } else if (isDashboardPath()) {
+    navigateToAuth();
+  }
+  updateViewForAuthState(authed);
   el.logoutBtn.disabled = !authed;
 
   if (!authed) {
@@ -1232,6 +1293,7 @@ async function handleLoginSubmit(event) {
     });
     appState.auth.token = login.data.accessToken;
     appState.auth.user = login.data.user;
+    navigateToDashboard(true);
     persistState();
     updateAuthUi();
     event.currentTarget.reset();
@@ -1266,6 +1328,7 @@ async function handleRegisterSubmit(event) {
     });
     appState.auth.token = register.data.accessToken;
     appState.auth.user = register.data.user;
+    navigateToDashboard(true);
     persistState();
     updateAuthUi();
     event.currentTarget.reset();
@@ -1555,14 +1618,17 @@ function tuneServiceModelFromProfile() {
 }
 
 function bindEvents() {
-  el.languageSelect?.addEventListener("change", event => {
+  const handleLanguageChange = event => {
     appState.language = event.currentTarget.value === "fr" ? "fr" : "en";
     appState.languageManualOverride = true;
     persistState();
     applyI18n();
     renderAll();
     updateAuthUi();
-  });
+  };
+
+  el.languageSelect?.addEventListener("change", handleLanguageChange);
+  el.dashboardLanguageSelect?.addEventListener("change", handleLanguageChange);
 
   el.connectionForm.addEventListener("submit", handleConnectionSubmit);
   el.loginForm.addEventListener("submit", handleLoginSubmit);
@@ -1612,6 +1678,10 @@ function bindEvents() {
     const documentId = button.getAttribute("data-document-id") || "";
     const fileName = button.getAttribute("data-file-name") || "";
     downloadDocument(documentId, fileName).catch(handleError);
+  });
+
+  window.addEventListener("popstate", () => {
+    updateAuthUi();
   });
 }
 
