@@ -159,7 +159,7 @@
     </section>
 
     <header id="dashboard-shell" class="dashboard-shell hidden">
-      <div class="dashboard-shell__inner">
+      <div class="dashboard-shell__inner panel">
         <div>
           <p class="eyebrow" data-i18n="brand.eyebrow">Eclair Technology Assistance</p>
           <h2 data-i18n="dashboard.title">Operational Dashboard</h2>
@@ -219,7 +219,29 @@
     </header>
 
     <main class="container hidden" id="app-main">
-      <section class="panel">
+      <div class="workspace-layout">
+        <aside class="dashboard-sidebar panel panel--stacked">
+          <div class="panel__header">
+            <h3 data-i18n="dashboard.nav.title">Workspace Navigation</h3>
+            <p class="muted small" data-i18n="dashboard.nav.subtitle">Jump to each operational area quickly.</p>
+          </div>
+          <nav class="dashboard-nav">
+            <a class="dashboard-nav__link" href="#section-overview" data-i18n="dashboard.nav.overview">Overview</a>
+            <a class="dashboard-nav__link" href="#section-docops" data-i18n="dashboard.nav.docops">Document AI Ops</a>
+            <a class="dashboard-nav__link" href="#section-migration" data-i18n="dashboard.nav.migration">Records Migration</a>
+            <a class="dashboard-nav__link" href="#section-compliance" data-i18n="dashboard.nav.compliance">Compliance & Training</a>
+            <a class="dashboard-nav__link" href="#section-documents" data-i18n="dashboard.nav.documents">Documents</a>
+            <a class="dashboard-nav__link" href="#section-services" data-i18n="dashboard.nav.services">Service Planner</a>
+            <a class="dashboard-nav__link" href="#section-indicators" data-i18n="dashboard.nav.indicators">Indicators</a>
+            <a class="dashboard-nav__link" href="#section-profile" data-i18n="dashboard.nav.profile">Institution Profile</a>
+          </nav>
+          <p class="muted small" data-i18n="dashboard.nav.status">
+            Use this sidebar to move quickly through each dashboard module.
+          </p>
+        </aside>
+
+        <div class="workspace-main">
+      <section class="panel panel--hero" id="section-overview">
         <div class="panel__header">
           <h2 data-i18n="overview.title">Program Overview</h2>
           <p class="muted" data-i18n="overview.subtitle">
@@ -229,7 +251,7 @@
         <div class="kpi-grid" id="kpi-grid"></div>
       </section>
 
-      <section class="panel panel--stacked">
+      <section class="panel panel--stacked" id="section-profile">
         <div class="panel__header">
           <h2 data-i18n="profile.title">Institution Profile</h2>
           <p class="muted" data-i18n="profile.subtitle">Baseline context used by the AI planning engine.</p>
@@ -284,7 +306,7 @@
         </form>
       </section>
 
-      <div class="split-grid">
+      <div class="split-grid" id="section-services">
         <section class="panel">
           <div class="panel__header">
             <h2 data-i18n="services.title">Service Planner</h2>
@@ -302,7 +324,7 @@
         </section>
       </div>
 
-      <div class="split-grid">
+      <div class="split-grid" id="section-compliance">
         <section class="panel panel--stacked">
           <div class="panel__header">
             <h2 data-i18n="audits.title">Compliance Audit Tracker</h2>
@@ -397,7 +419,7 @@
         </section>
       </div>
 
-      <section class="panel panel--stacked">
+      <section class="panel panel--stacked" id="section-documents">
         <div class="panel__header">
           <h2 data-i18n="documents.title">Document Upload Center</h2>
           <p class="muted" data-i18n="documents.subtitle">
@@ -433,7 +455,7 @@
         <div id="documents-list" class="list"></div>
       </section>
 
-      <section class="panel panel--stacked">
+      <section class="panel panel--stacked panel--elevated" id="section-migration">
         <div class="panel__header">
           <h2 data-i18n="migration.title">Digital Records Migration</h2>
           <p class="muted" data-i18n="migration.subtitle">
@@ -552,7 +574,7 @@
         </div>
       </section>
 
-      <section class="panel panel--stacked">
+      <section class="panel panel--stacked panel--elevated" id="section-docops">
         <div class="panel__header">
           <h2 data-i18n="docOps.title">AI-Powered Document Operations</h2>
           <p class="muted" data-i18n="docOps.subtitle">
@@ -719,13 +741,15 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="section-indicators">
         <div class="panel__header">
           <h2 data-i18n="indicators.title">Cybersecurity Governance & Workflow Automation Indicators</h2>
           <p class="muted" data-i18n="indicators.subtitle">Control posture and automation outcomes for executives.</p>
         </div>
         <div class="indicator-grid" id="indicator-grid"></div>
       </section>
+        </div>
+      </div>
     </main>
 
     <footer class="footer">

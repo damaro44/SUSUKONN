@@ -94,7 +94,7 @@ h1 {
 .dashboard-shell {
   max-width: 1160px;
   margin: 1.2rem auto 0;
-  padding: 1rem;
+  padding: 0 1rem;
 }
 
 .dashboard-shell__inner {
@@ -102,6 +102,8 @@ h1 {
   gap: 1rem;
   justify-content: space-between;
   align-items: flex-start;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
 }
 
 .dashboard-shell__actions {
@@ -112,6 +114,10 @@ h1 {
 
 .dashboard-active .footer {
   padding-top: 1rem;
+}
+
+.dashboard-active {
+  background: radial-gradient(circle at top left, rgba(14, 61, 167, 0.4) 0%, var(--bg) 38%, #010721 100%);
 }
 
 .auth-form {
@@ -216,6 +222,54 @@ h1 {
   gap: 1rem;
 }
 
+.workspace-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.workspace-main {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-sidebar {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 1.5rem);
+  overflow: auto;
+}
+
+.dashboard-nav {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.dashboard-nav__link {
+  display: block;
+  padding: 0.46rem 0.6rem;
+  border-radius: 10px;
+  text-decoration: none;
+  color: #d6e9ff;
+  border: 1px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.dashboard-nav__link:hover {
+  background: rgba(0, 166, 255, 0.16);
+  border-color: rgba(0, 166, 255, 0.38);
+}
+
+.panel--hero {
+  border-width: 1.5px;
+}
+
+.panel--elevated {
+  border-color: rgba(0, 166, 255, 0.38);
+  box-shadow: 0 20px 44px rgba(0, 12, 45, 0.35);
+}
+
 .panel {
   padding: 1rem;
 }
@@ -261,7 +315,7 @@ h1 {
 
 .kpi,
 .indicator {
-  padding: 0.75rem;
+  padding: 0.85rem;
 }
 
 .kpi h3,
@@ -405,7 +459,7 @@ textarea:focus {
 
 .service-card,
 .list-item {
-  padding: 0.72rem;
+  padding: 0.78rem;
 }
 
 .service-head,
@@ -487,6 +541,7 @@ textarea:focus {
 @media (max-width: 960px) {
   .hero__inner,
   .dashboard-shell__inner,
+  .workspace-layout,
   .split-grid,
   .docops-split,
   .kpi-grid,
@@ -499,5 +554,10 @@ textarea:focus {
 
   .dashboard-shell__actions {
     justify-items: stretch;
+  }
+
+  .dashboard-sidebar {
+    position: static;
+    max-height: none;
   }
 }
