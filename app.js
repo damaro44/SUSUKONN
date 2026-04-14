@@ -30,7 +30,8 @@ const ROLE_PERMISSIONS = {
     "manageWorkflows",
     "collaborate",
     "viewAnalytics",
-    "migrateRecords"
+    "migrateRecords",
+    "directMessaging"
   ],
   compliance_officer: [
     "refresh",
@@ -42,9 +43,10 @@ const ROLE_PERMISSIONS = {
     "manageWorkflows",
     "collaborate",
     "viewAnalytics",
-    "migrateRecords"
+    "migrateRecords",
+    "directMessaging"
   ],
-  auditor: ["refresh", "downloadReports", "processDocuments", "collaborate", "viewAnalytics"],
+  auditor: ["refresh", "downloadReports", "processDocuments", "collaborate", "viewAnalytics", "directMessaging"],
   training_manager: [
     "refresh",
     "createTraining",
@@ -52,7 +54,8 @@ const ROLE_PERMISSIONS = {
     "manageWorkflows",
     "collaborate",
     "viewAnalytics",
-    "migrateRecords"
+    "migrateRecords",
+    "directMessaging"
   ]
 };
 
@@ -77,6 +80,11 @@ const appState = {
   documentProcessing: [],
   workflowTemplates: [],
   workflowRuns: [],
+  messagingUsers: [],
+  messagingConversations: [],
+  messagingInbox: [],
+  selectedMessagingUserId: "",
+  messagingBox: "inbox",
   comments: [],
   auditTrail: [],
   analytics: null,
@@ -142,6 +150,13 @@ const el = {
   processingList: document.getElementById("processing-list"),
   workflowTemplatesList: document.getElementById("workflow-templates-list"),
   workflowRunsList: document.getElementById("workflow-runs-list"),
+  messagingUsersList: document.getElementById("messaging-users-list"),
+  messagingThreadList: document.getElementById("messaging-thread-list"),
+  messagingForm: document.getElementById("messaging-form"),
+  messagingRecipient: document.getElementById("messaging-recipient"),
+  messagingBox: document.getElementById("messaging-box"),
+  messagingRbacNote: document.getElementById("messaging-rbac-note"),
+  refreshMessagingBtn: document.getElementById("refresh-messaging-btn"),
   versionsList: document.getElementById("document-versions-list"),
   commentsList: document.getElementById("collaboration-comments-list"),
   auditTrailList: document.getElementById("audit-trail-list"),

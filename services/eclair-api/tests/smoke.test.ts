@@ -185,6 +185,50 @@ describe("Eclair API smoke", () => {
     expect(analytics.body.data.security.complianceFrameworks).toEqual(["HIPAA", "SOC 2", "GDPR"]);
   });
 
+  it("supports secure direct messaging between personnel", async () => {
+    const senderToken = await loginAs("compliance@eclair.tech", "Compliance@2026");
+    const recipientToken = await loginAs("training@eclair.tech", "Training@2026");
+
+    const users = await request(app).get("/v1/messaging/users").set("Authorization", `Bearer ${senderToken}`);
+    expect(users.status).toBe(200);
+    const recipient = users.body.data.find((item: { email: string }) => item.email === "training@eclair.tech");
+    expect(recipient).toBeTruthy();
+
+    const sent = await request(app)
+      .post("/v1/messaging/conversations")
+      .set("Authorization", `Bearer ${senderToken}`)
+      .send({
+        recipientUserId: recipient.id,
+        subject: "Inter-department handoff",
+        message: "Please validate the compliance package before final archive."
+      });
+    expect(sent.status).toBe(201);
+    expect(sent.body.data.subject).toBe("Inter-department handoff");
+    expect(sent.body.data.message).toContain("validate the compliance package");
+
+    const inbox = await request(app).get("/v1/messaging/inbox").set("Authorization", `Bearer ${recipientToken}`);
+    expect(inbox.status).toBe(200);
+    expect(Array.isArray(inbox.body.data)).toBe(true);
+    const inboxThread = inbox.body.data.find(
+      (thread: { counterpartyId: string; latestMessage: { id: string } }) => thread.counterpartyId === sent.body.data.senderId
+    );
+    expect(inboxThread).toBeTruthy();
+    expect(inboxThread.latestMessage.id).toBe(sent.body.data.id);
+
+    const markRead = await request(app)
+      .patch(`/v1/messaging/conversations/${encodeURIComponent(sent.body.data.id)}/read`)
+      .set("Authorization", `Bearer ${recipientToken}`);
+    expect(markRead.status).toBe(200);
+    expect(markRead.body.data.readAt).toBeTruthy();
+
+    const conversation = await request(app)
+      .get(`/v1/messaging/conversations?userId=${encodeURIComponent(sent.body.data.senderId)}&limit=20`)
+      .set("Authorization", `Bearer ${recipientToken}`);
+    expect(conversation.status).toBe(200);
+    expect(Array.isArray(conversation.body.data)).toBe(true);
+    expect(conversation.body.data.some((item: { id: string }) => item.id === sent.body.data.id)).toBe(true);
+  });
+
   it("creates records migration projects and batches with dashboard metrics", async () => {
     const token = await loginAs("compliance@eclair.tech", "Compliance@2026");
 

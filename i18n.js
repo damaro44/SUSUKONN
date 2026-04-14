@@ -16,6 +16,7 @@ export const PERMISSION_KEYS = [
   "processDocuments",
   "manageWorkflows",
   "collaborate",
+  "messageTeams",
   "viewAnalytics",
   "migrateRecords"
 ];

@@ -230,6 +230,7 @@
             <a class="dashboard-nav__link" href="#section-docops" data-i18n="dashboard.nav.docops">Document AI Ops</a>
             <a class="dashboard-nav__link" href="#section-migration" data-i18n="dashboard.nav.migration">Records Migration</a>
             <a class="dashboard-nav__link" href="#section-compliance" data-i18n="dashboard.nav.compliance">Compliance & Training</a>
+            <a class="dashboard-nav__link" href="#section-messaging" data-i18n="dashboard.nav.messaging">Secure Messaging</a>
             <a class="dashboard-nav__link" href="#section-documents" data-i18n="dashboard.nav.documents">Documents</a>
             <a class="dashboard-nav__link" href="#section-services" data-i18n="dashboard.nav.services">Service Planner</a>
             <a class="dashboard-nav__link" href="#section-indicators" data-i18n="dashboard.nav.indicators">Indicators</a>
@@ -418,6 +419,63 @@
           <div id="training-list" class="list"></div>
         </section>
       </div>
+
+      <section class="panel panel--stacked panel--elevated" id="section-messaging">
+        <div class="panel__header">
+          <h2 data-i18n="messaging.title">Secure Department Messaging</h2>
+          <p class="muted" data-i18n="messaging.subtitle">
+            Exchange encrypted direct messages between departments and personnel in real time.
+          </p>
+          <p class="muted small hidden" id="messaging-rbac-note"></p>
+        </div>
+        <div class="messaging-layout">
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="messaging.composeTitle">Compose message</h3>
+            </div>
+            <form id="direct-message-form" class="form-grid compact">
+              <label>
+                <span data-i18n="messaging.recipient">Recipient</span>
+                <select id="direct-message-recipient" name="recipientUserId" required></select>
+              </label>
+              <label>
+                <span data-i18n="messaging.subject">Subject</span>
+                <input
+                  name="subject"
+                  required
+                  placeholder="e.g. Compliance review follow-up"
+                  data-i18n-placeholder="messaging.subjectPlaceholder"
+                />
+              </label>
+              <label class="full">
+                <span data-i18n="messaging.message">Message</span>
+                <textarea
+                  name="message"
+                  rows="4"
+                  required
+                  placeholder="Type your secure message..."
+                  data-i18n-placeholder="messaging.messagePlaceholder"
+                ></textarea>
+              </label>
+              <button type="submit" class="btn btn--primary" data-i18n="messaging.sendButton">Send message</button>
+            </form>
+          </section>
+
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="messaging.inboxTitle">Inbox & conversation</h3>
+            </div>
+            <form id="direct-message-thread-form" class="form-grid compact">
+              <label class="full">
+                <span data-i18n="messaging.conversationWith">Conversation with</span>
+                <select id="direct-message-thread-user" name="conversationUserId"></select>
+              </label>
+            </form>
+            <div id="direct-message-inbox" class="list"></div>
+            <div id="direct-message-thread" class="list"></div>
+          </section>
+        </div>
+      </section>
 
       <section class="panel panel--stacked" id="section-documents">
         <div class="panel__header">

@@ -4,6 +4,7 @@ import {
   collaborationComments,
   complianceAudits,
   decryptToPlainText,
+  directMessages,
   departmentRoutingKeywords,
   documentProcessingRecords,
   documentRecords,
@@ -21,6 +22,7 @@ import type {
   CollaborationComment,
   ComplianceAuditItem,
   Department,
+  DirectMessage,
   DocumentProcessingRecord,
   DocumentRecord,
   DocumentVersion,
@@ -68,6 +70,12 @@ interface UploadDocumentInput {
 
 interface AddDocumentCommentInput {
   documentId: string;
+  message: string;
+}
+
+interface SendDirectMessageInput {
+  recipientUserId: string;
+  subject: string;
   message: string;
 }
 
@@ -223,6 +231,42 @@ function toMigrationProjectSummary(project: RecordsMigrationProject) {
     completionPercent: calculateMigrationCompletionPercent(historicalRecords, digitizedRecords),
     latestBackupVerifiedAt: latestBackup ?? null
   };
+}
+
+function toDirectMessageView(message: DirectMessage, viewerId: string) {
+  const sender = users.find(item => item.id === message.senderId);
+  const recipient = users.find(item => item.id === message.recipientUserId);
+  return {
+    id: message.id,
+    senderId: message.senderId,
+    recipientUserId: message.recipientUserId,
+    subject: message.subject,
+    message: decryptToPlainText(message.encryptedPayload),
+    createdAt: message.createdAt,
+    readAt: message.readAt,
+    sender: sender
+      ? {
+          id: sender.id,
+          fullName: sender.fullName,
+          email: sender.email,
+          role: sender.role
+        }
+      : null,
+    recipient: recipient
+      ? {
+          id: recipient.id,
+          fullName: recipient.fullName,
+          email: recipient.email,
+          role: recipient.role
+        }
+      : null,
+    direction: message.senderId === viewerId ? "sent" : "received"
+  };
+}
+
+function safeToMessageBox(value: string | undefined): "inbox" | "sent" | "all" {
+  if (value === "sent" || value === "all") return value;
+  return "inbox";
 }
 
 export const eclairService = {
@@ -624,6 +668,127 @@ export const eclairService = {
       documentId: input.documentId
     });
     return comment;
+  },
+
+  listMessagingUsers(userId: string) {
+    return users
+      .filter(item => item.id !== userId)
+      .map(item => ({
+        id: item.id,
+        fullName: item.fullName,
+        email: item.email,
+        role: item.role
+      }))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+  },
+
+  sendDirectMessage(input: SendDirectMessageInput, userId: string) {
+    const sender = users.find(item => item.id === userId);
+    if (!sender) {
+      throw new Error("Sender profile not found");
+    }
+    const recipient = users.find(item => item.id === input.recipientUserId);
+    if (!recipient) {
+      throw new Error("Recipient was not found");
+    }
+    const normalizedSubject = input.subject.trim();
+    const normalizedMessage = input.message.trim();
+    if (!normalizedSubject || !normalizedMessage) {
+      throw new Error("Message subject and body are required");
+    }
+    const record: DirectMessage = {
+      id: randomUUID(),
+      senderId: sender.id,
+      recipientUserId: recipient.id,
+      subject: normalizedSubject,
+      encryptedPayload: encryptPlainText(normalizedMessage),
+      createdAt: new Date().toISOString(),
+      readAt: null
+    };
+    directMessages.unshift(record);
+    pushAuditEvent({
+      action: "DIRECT_MESSAGE_SENT",
+      actorId: userId,
+      metadata: {
+        recipientUserId: recipient.id
+      }
+    });
+    return toDirectMessageView(record, userId);
+  },
+
+  listDirectMessagesByBox(userId: string, box: "inbox" | "sent" | "all" = "inbox", limit = 100) {
+    const effectiveLimit = Math.min(Math.max(1, limit), 100);
+    const normalizedBox = safeToMessageBox(box);
+    const matchesBox = (item: DirectMessage): boolean => {
+      if (normalizedBox === "inbox") return item.recipientUserId === userId;
+      if (normalizedBox === "sent") return item.senderId === userId;
+      return item.recipientUserId === userId || item.senderId === userId;
+    };
+    return directMessages
+      .filter(matchesBox)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, effectiveLimit)
+      .map(item => toDirectMessageView(item, userId));
+  },
+
+  listDirectMessages(userId: string, participantUserId?: string, limit = 100) {
+    const effectiveLimit = Math.min(Math.max(1, limit), 100);
+    const matchesBox = (item: DirectMessage): boolean => {
+      const isParticipant = item.recipientUserId === userId || item.senderId === userId;
+      if (!isParticipant) return false;
+      if (!participantUserId) return true;
+      return item.recipientUserId === participantUserId || item.senderId === participantUserId;
+    };
+    return directMessages
+      .filter(matchesBox)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, effectiveLimit)
+      .map(item => toDirectMessageView(item, userId));
+  },
+
+  markDirectMessageRead(messageId: string, userId: string) {
+    const target = directMessages.find(item => item.id === messageId);
+    if (!target) {
+      throw new Error("Message not found");
+    }
+    if (target.recipientUserId !== userId && target.senderId !== userId) {
+      throw new Error("Message access denied");
+    }
+    if (!target.readAt && target.recipientUserId === userId) {
+      target.readAt = new Date().toISOString();
+      pushAuditEvent({
+        action: "DIRECT_MESSAGE_READ",
+        actorId: userId,
+        metadata: { messageId: target.id, senderId: target.senderId }
+      });
+    }
+    return toDirectMessageView(target, userId);
+  },
+
+  messagingInbox(userId: string) {
+    const bySender = new Map<string, ReturnType<typeof toDirectMessageView>>();
+    const unreadBySender = new Map<string, number>();
+
+    const visible = directMessages
+      .filter(item => item.recipientUserId === userId || item.senderId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    for (const item of visible) {
+      const otherPartyId = item.senderId === userId ? item.recipientUserId : item.senderId;
+      if (!otherPartyId) continue;
+      if (!bySender.has(otherPartyId)) {
+        bySender.set(otherPartyId, toDirectMessageView(item, userId));
+      }
+      if (item.recipientUserId === userId && !item.readAt) {
+        unreadBySender.set(otherPartyId, (unreadBySender.get(otherPartyId) || 0) + 1);
+      }
+    }
+
+    return Array.from(bySender.entries()).map(([counterpartyId, latest]) => ({
+      counterpartyId,
+      unreadCount: unreadBySender.get(counterpartyId) || 0,
+      latestMessage: latest
+    }));
   },
 
   listDocumentComments(documentId: string): CollaborationComment[] {

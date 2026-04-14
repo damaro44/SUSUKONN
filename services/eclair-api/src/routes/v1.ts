@@ -92,6 +92,17 @@ const commentSchema = z.object({
   message: z.string().min(2).max(1000)
 });
 
+const directMessageSendSchema = z.object({
+  recipientUserId: z.string().min(1),
+  subject: z.string().min(2).max(160),
+  message: z.string().min(1).max(2000)
+});
+
+const directMessageListQuerySchema = z.object({
+  userId: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional()
+});
+
 const migrationProjectSchema = z.object({
   name: z.string().min(3),
   industry: z.enum(["government", "law_enforcement", "hospitals", "education"]),
@@ -366,6 +377,37 @@ v1Router.get("/collaboration/audit-trail", requireAuth, (request, response) => {
     documentId: typeof request.query.documentId === "string" ? request.query.documentId : undefined
   });
   const data = eclairService.listAuditTrail(payload.documentId);
+  response.json({ data });
+});
+
+v1Router.get("/messaging/users", requireAuth, (request, response) => {
+  const data = eclairService.listMessagingUsers(request.authUser!.id);
+  response.json({ data });
+});
+
+v1Router.get("/messaging/conversations", requireAuth, (request, response) => {
+  const payload = directMessageListQuerySchema.parse({
+    userId: typeof request.query.userId === "string" ? request.query.userId : undefined,
+    limit: request.query.limit
+  });
+  const data = eclairService.listDirectMessages(request.authUser!.id, payload.userId, payload.limit);
+  response.json({ data });
+});
+
+v1Router.post("/messaging/conversations", requireAuth, (request, response) => {
+  const payload = directMessageSendSchema.parse(request.body);
+  const data = eclairService.sendDirectMessage(payload, request.authUser!.id);
+  response.status(201).json({ data });
+});
+
+v1Router.patch("/messaging/conversations/:messageId/read", requireAuth, (request, response) => {
+  const messageId = pathParam(request.params.messageId);
+  const data = eclairService.markDirectMessageRead(messageId, request.authUser!.id);
+  response.json({ data });
+});
+
+v1Router.get("/messaging/inbox", requireAuth, (request, response) => {
+  const data = eclairService.messagingInbox(request.authUser!.id);
   response.json({ data });
 });
 

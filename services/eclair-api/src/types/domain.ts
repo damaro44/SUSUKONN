@@ -149,3 +149,13 @@ export interface RecordsMigrationBatch {
   createdAt: string;
   createdBy: string;
 }
+
+export interface DirectMessage {
+  id: string;
+  senderId: string;
+  recipientUserId: string;
+  subject: string;
+  encryptedPayload: EncryptedPayload;
+  createdAt: string;
+  readAt: string | null;
+}

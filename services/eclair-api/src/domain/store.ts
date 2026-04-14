@@ -10,6 +10,7 @@ import type {
   CollaborationComment,
   ComplianceAuditItem,
   Department,
+  DirectMessage,
   DocumentProcessingRecord,
   DocumentRecord,
   DocumentVersion,
@@ -179,6 +180,31 @@ export const workflowTemplates: WorkflowTemplate[] = [
 export const workflowRuns: WorkflowRun[] = [];
 
 export const collaborationComments: CollaborationComment[] = [];
+
+export const directMessages: DirectMessage[] = [
+  {
+    id: "msg-1",
+    senderId: "u-compliance",
+    recipientUserId: "u-training",
+    subject: "PARAE controls workshop schedule",
+    encryptedPayload: encryptPlainText(
+      "Please confirm availability for the PARAE controls workshop this Thursday at 10:00."
+    ),
+    createdAt: now(),
+    readAt: null
+  },
+  {
+    id: "msg-2",
+    senderId: "u-training",
+    recipientUserId: "u-compliance",
+    subject: "Re: PARAE controls workshop schedule",
+    encryptedPayload: encryptPlainText(
+      "Confirmed. Training facilitators are ready and attendance tracking template is prepared."
+    ),
+    createdAt: now(),
+    readAt: null
+  }
+];
 
 export const documentVersions: DocumentVersion[] = [
   {
