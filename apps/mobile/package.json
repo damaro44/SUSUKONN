@@ -15,8 +15,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "^3.0.2",
     "@susukonnect/shared": "*",
     "expo": "latest",
+    "expo-linking": "^55.0.11",
+    "expo-secure-store": "^55.0.11",
     "expo-status-bar": "latest",
     "react": "latest",
     "react-native": "latest",

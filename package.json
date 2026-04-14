@@ -8,12 +8,13 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @susukonnect/shared && npm run build --workspace @susukonnect/api-node && npm run build --workspace @susukonnect/mobile",
+    "build": "npm run build --workspace @susukonnect/shared && npm run build --workspace @susukonnect/api-node && npm run build --workspace @eclair/api && npm run build --workspace @susukonnect/mobile",
     "dev:api": "npm run dev --workspace @susukonnect/api-node",
+    "dev:eclair-api": "npm run dev --workspace @eclair/api",
     "dev:mobile": "npm run start --workspace @susukonnect/mobile",
-    "lint": "npm run lint --workspace @susukonnect/shared && npm run lint --workspace @susukonnect/api-node && npm run lint --workspace @susukonnect/mobile",
-    "test": "npm run test --workspace @susukonnect/api-node",
-    "typecheck": "npm run typecheck --workspace @susukonnect/shared && npm run typecheck --workspace @susukonnect/api-node && npm run typecheck --workspace @susukonnect/mobile"
+    "lint": "npm run lint --workspace @susukonnect/shared && npm run lint --workspace @susukonnect/api-node && npm run lint --workspace @eclair/api && npm run lint --workspace @susukonnect/mobile",
+    "test": "npm run test --workspace @susukonnect/api-node && npm run test --workspace @eclair/api",
+    "typecheck": "npm run typecheck --workspace @susukonnect/shared && npm run typecheck --workspace @susukonnect/api-node && npm run typecheck --workspace @eclair/api && npm run typecheck --workspace @susukonnect/mobile"
   },
   "engines": {
     "node": ">=20"

@@ -4,53 +4,821 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SusuKonnect | Collective Savings Fintech MVP</title>
+    <title>Eclair Technology Assistance | AI Government Digitalization & Compliance</title>
     <meta
       name="description"
-      content="SusuKonnect digitizes trusted community savings circles with transparent contributions, secure payouts, and compliant fintech controls."
+      content="Eclair Technology Assistance delivers AI-powered government digitalization, PARAE-aligned compliance audits, workflow automation, cybersecurity governance, change management, and public-sector training."
     />
-    <meta name="theme-color" content="#0c3c64" />
+    <meta name="theme-color" content="#03133a" />
     <link rel="manifest" href="manifest.json" />
     <link rel="icon" href="assets/susukonnect-mark.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div id="app">
-      <header class="brand-header">
-        <img
-          src="assets/susukonnect-logo.svg"
-          alt="SusuKonnect logo with tagline"
-          class="brand-logo"
-        />
-      </header>
-
-      <main class="app-main" id="app-main">
-        <noscript>
-          <p class="noscript-warning">
-            SusuKonnect requires JavaScript to load secure onboarding and
-            savings workflows.
+    <section id="auth-view">
+      <header class="hero">
+        <div class="hero__inner">
+        <div class="hero__branding">
+          <p class="eyebrow" data-i18n="brand.eyebrow">Eclair Technology Assistance</p>
+          <h1 data-i18n="brand.headline">
+            AI-powered digitalization and compliance operations for governments and
+            regulated institutions
+          </h1>
+          <p class="hero__summary" data-i18n="brand.summary">
+            Plan, execute, and monitor compliance audits, process automation,
+            AI workflow deployment, cybersecurity governance, change management,
+            and PARAE-aligned capacity building in one efficient platform.
           </p>
-        </noscript>
-      </main>
-    </div>
+          <div class="hero__tags" id="sector-tags"></div>
+        </div>
 
-    <div id="mfa-modal" class="modal hidden" role="dialog" aria-modal="true">
-      <div class="modal-panel">
-        <h2>MFA Verification Required</h2>
-        <p id="mfa-purpose"></p>
-        <p class="demo-code" id="mfa-code"></p>
-        <form id="mfa-form">
-          <label for="mfa-input">Enter 6-digit verification code</label>
-          <input id="mfa-input" name="code" minlength="6" maxlength="6" required />
-          <div class="modal-actions">
-            <button type="submit" class="btn-primary">Confirm</button>
-            <button type="button" id="mfa-cancel" class="btn-secondary">Cancel</button>
+          <aside class="hero__panel">
+            <div class="language-switcher">
+              <label>
+                <span data-i18n="language.label">Language</span>
+                <select id="language-select">
+                  <option value="en">English</option>
+                  <option value="fr">Francais</option>
+                </select>
+              </label>
+            </div>
+
+          <h2 data-i18n="auth.heading">Secure Backend Access</h2>
+          <p class="muted" data-i18n="auth.summary">
+            Authenticate to the live Eclair API for protected operations and
+            report exports.
+          </p>
+
+          <form id="connection-form" class="auth-form">
+            <label>
+              <span data-i18n="auth.apiBaseLabel">API Base URL</span>
+              <input
+                id="api-base-url"
+                name="apiBaseUrl"
+                placeholder="http://localhost:4100/v1"
+                data-i18n-placeholder="auth.apiBasePlaceholder"
+              />
+            </label>
+            <button class="btn btn--secondary" type="submit" data-i18n="auth.saveApiButton">
+              Save API URL
+            </button>
+          </form>
+
+            <form id="login-form" class="auth-form">
+              <label class="signin-field">
+                <span data-i18n="auth.emailLabel">Work Email</span>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="admin@eclair.tech"
+                  data-i18n-placeholder="auth.emailPlaceholder"
+                  required
+                />
+              </label>
+              <label class="signin-field">
+                <span data-i18n="auth.passwordLabel">Password</span>
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="********"
+                  data-i18n-placeholder="auth.passwordPlaceholder"
+                  required
+                />
+              </label>
+              <button
+                class="btn btn--primary"
+                id="signin-btn"
+                type="submit"
+                data-i18n="auth.signInButton"
+              >
+                Sign in
+              </button>
+            </form>
+
+            <form id="register-form" class="auth-form">
+              <label>
+                <span data-i18n="auth.registerFullName">Full Name</span>
+                <input
+                  type="text"
+                  name="fullName"
+                  placeholder="e.g. Operations Manager"
+                  data-i18n-placeholder="auth.registerFullNamePlaceholder"
+                  required
+                />
+              </label>
+              <label>
+                <span data-i18n="auth.registerEmailLabel">Email</span>
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="new.user@eclair.tech"
+                  data-i18n-placeholder="auth.registerEmailPlaceholder"
+                  required
+                />
+              </label>
+              <label>
+                <span data-i18n="auth.registerRoleLabel">Role</span>
+                <select name="role" required>
+                  <option value="" data-i18n="common.select">Select...</option>
+                  <option value="compliance_officer" data-i18n="role.compliance_officer">Compliance Officer</option>
+                  <option value="auditor" data-i18n="role.auditor">Auditor</option>
+                  <option value="training_manager" data-i18n="role.training_manager">Training Manager</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="auth.registerPasswordLabel">Password</span>
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="At least 8 chars"
+                  data-i18n-placeholder="auth.registerPasswordPlaceholder"
+                  required
+                />
+              </label>
+              <label>
+                <span data-i18n="auth.registerConfirmLabel">Confirm Password</span>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  placeholder="Repeat password"
+                  data-i18n-placeholder="auth.registerConfirmPlaceholder"
+                  required
+                />
+              </label>
+              <button class="btn btn--secondary" type="submit" data-i18n="auth.registerButton">
+                Sign up & continue
+              </button>
+            </form>
+
+            <p class="muted small" data-i18n="auth.dashboardRedirectHint">
+              Sign in or sign up to continue directly to your dashboard.
+            </p>
+          </aside>
+        </div>
+      </header>
+    </section>
+
+    <header id="dashboard-shell" class="dashboard-shell hidden">
+      <div class="dashboard-shell__inner panel">
+        <div>
+          <p class="eyebrow" data-i18n="brand.eyebrow">Eclair Technology Assistance</p>
+          <h2 data-i18n="dashboard.title">Operational Dashboard</h2>
+          <p class="muted" id="auth-status" data-i18n="auth.notAuthenticated">Not authenticated.</p>
+        </div>
+        <div class="dashboard-shell__actions">
+          <div class="language-switcher">
+            <label>
+              <span data-i18n="language.label">Language</span>
+              <select id="dashboard-language-select">
+                <option value="en">English</option>
+                <option value="fr">Francais</option>
+              </select>
+            </label>
           </div>
-        </form>
-      </div>
-    </div>
+          <div class="quick-actions">
+            <button class="btn btn--secondary" id="refresh-live-data" type="button" data-i18n="auth.refreshButton">
+              Refresh live data
+            </button>
+            <button
+              class="btn btn--secondary"
+              type="button"
+              id="logout-btn"
+              disabled
+              data-i18n="auth.signOutButton"
+            >
+              Sign out
+            </button>
+          </div>
 
-    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+          <div class="quick-actions" id="report-actions">
+            <button class="btn btn--secondary" id="download-csv" type="button" disabled data-i18n="auth.downloadCsv">
+              Download CSV report
+            </button>
+            <button class="btn btn--secondary" id="download-pdf" type="button" disabled data-i18n="auth.downloadPdf">
+              Download PDF report
+            </button>
+          </div>
+          <p class="muted small hidden" id="report-rbac-note"></p>
+        </div>
+      </div>
+
+      <section id="capabilities-panel" class="capabilities hidden">
+        <h3 data-i18n="capabilities.title">Role Capabilities</h3>
+        <p class="muted small" id="capabilities-role"></p>
+        <div class="capabilities-grid">
+          <div>
+            <strong data-i18n="capabilities.allowed">Allowed</strong>
+            <ul id="capabilities-allowed"></ul>
+          </div>
+          <div>
+            <strong data-i18n="capabilities.restricted">Restricted</strong>
+            <ul id="capabilities-restricted"></ul>
+          </div>
+        </div>
+      </section>
+    </header>
+
+    <main class="container hidden" id="app-main">
+      <div class="workspace-layout">
+        <aside class="dashboard-sidebar panel panel--stacked">
+          <div class="panel__header">
+            <h3 data-i18n="dashboard.nav.title">Workspace Navigation</h3>
+            <p class="muted small" data-i18n="dashboard.nav.subtitle">Jump to each operational area quickly.</p>
+          </div>
+          <nav class="dashboard-nav">
+            <a class="dashboard-nav__link" href="#section-overview" data-i18n="dashboard.nav.overview">Overview</a>
+            <a class="dashboard-nav__link" href="#section-docops" data-i18n="dashboard.nav.docops">Document AI Ops</a>
+            <a class="dashboard-nav__link" href="#section-migration" data-i18n="dashboard.nav.migration">Records Migration</a>
+            <a class="dashboard-nav__link" href="#section-compliance" data-i18n="dashboard.nav.compliance">Compliance & Training</a>
+            <a class="dashboard-nav__link" href="#section-messaging" data-i18n="dashboard.nav.messaging">Secure Messaging</a>
+            <a class="dashboard-nav__link" href="#section-documents" data-i18n="dashboard.nav.documents">Documents</a>
+            <a class="dashboard-nav__link" href="#section-services" data-i18n="dashboard.nav.services">Service Planner</a>
+            <a class="dashboard-nav__link" href="#section-indicators" data-i18n="dashboard.nav.indicators">Indicators</a>
+            <a class="dashboard-nav__link" href="#section-profile" data-i18n="dashboard.nav.profile">Institution Profile</a>
+          </nav>
+          <p class="muted small" data-i18n="dashboard.nav.status">
+            Use this sidebar to move quickly through each dashboard module.
+          </p>
+        </aside>
+
+        <div class="workspace-main">
+      <section class="panel panel--hero" id="section-overview">
+        <div class="panel__header">
+          <h2 data-i18n="overview.title">Program Overview</h2>
+          <p class="muted" data-i18n="overview.subtitle">
+            Cross-service KPIs aligned to national digital standards and PARAE priorities.
+          </p>
+        </div>
+        <div class="kpi-grid" id="kpi-grid"></div>
+      </section>
+
+      <section class="panel panel--stacked" id="section-profile">
+        <div class="panel__header">
+          <h2 data-i18n="profile.title">Institution Profile</h2>
+          <p class="muted" data-i18n="profile.subtitle">Baseline context used by the AI planning engine.</p>
+        </div>
+        <form id="profile-form" class="form-grid">
+          <label>
+            <span data-i18n="profile.institutionName">Institution Name</span>
+            <input
+              name="institutionName"
+              required
+              placeholder="e.g. Ministry of Public Service"
+              data-i18n-placeholder="profile.institutionNamePlaceholder"
+            />
+          </label>
+          <label>
+            <span data-i18n="profile.institutionType">Institution Type</span>
+            <select name="institutionType" required>
+              <option value="" data-i18n="common.select">Select...</option>
+              <option data-i18n="profile.type.governmentAgency">Government Agency</option>
+              <option data-i18n="profile.type.ministry">Ministry</option>
+              <option data-i18n="profile.type.publicInstitution">Public Institution</option>
+              <option data-i18n="profile.type.regulatedPrivate">Regulated Private Organization</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="profile.region">Country / Region</span>
+            <input name="region" required placeholder="e.g. Rwanda" data-i18n-placeholder="profile.regionPlaceholder" />
+          </label>
+          <label>
+            <span data-i18n="profile.digitalMaturity">Digital Maturity (1-5)</span>
+            <input name="digitalMaturity" type="number" min="1" max="5" required />
+          </label>
+          <label>
+            <span data-i18n="profile.paraePreparedness">PARAE Preparedness (1-5)</span>
+            <input name="paraePreparedness" type="number" min="1" max="5" required />
+          </label>
+          <label>
+            <span data-i18n="profile.budget">Annual Compliance Budget (USD)</span>
+            <input name="budget" type="number" min="0" step="1000" required />
+          </label>
+          <label class="full">
+            <span data-i18n="profile.objectives">Strategic Objectives</span>
+            <textarea
+              name="objectives"
+              rows="3"
+              placeholder="Summarize desired outcomes: service digitization, response time reduction, audit readiness, etc."
+              data-i18n-placeholder="profile.objectivesPlaceholder"
+              required
+            ></textarea>
+          </label>
+          <button type="submit" class="btn btn--primary" data-i18n="profile.saveButton">Save profile</button>
+        </form>
+      </section>
+
+      <div class="split-grid" id="section-services">
+        <section class="panel">
+          <div class="panel__header">
+            <h2 data-i18n="services.title">Service Planner</h2>
+            <p class="muted" data-i18n="services.subtitle">Track all six Eclair service lines in one view.</p>
+          </div>
+          <div id="service-cards" class="service-cards"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__header">
+            <h2 data-i18n="queue.title">AI Prioritized Action Queue</h2>
+            <p class="muted" data-i18n="queue.subtitle">Generated from risk, impact, and readiness signals.</p>
+          </div>
+          <ol id="action-queue" class="action-queue"></ol>
+        </section>
+      </div>
+
+      <div class="split-grid" id="section-compliance">
+        <section class="panel panel--stacked">
+          <div class="panel__header">
+            <h2 data-i18n="audits.title">Compliance Audit Tracker</h2>
+            <p class="muted" data-i18n="audits.subtitle">Register findings and assign mitigation owners.</p>
+            <p class="muted small hidden" id="audit-rbac-note"></p>
+          </div>
+          <form id="audit-form" class="form-grid compact">
+            <label>
+              <span data-i18n="audits.standard">Standard / Requirement</span>
+              <input
+                name="standard"
+                required
+                placeholder="PARAE Section / National Standard"
+                data-i18n-placeholder="audits.standardPlaceholder"
+              />
+            </label>
+            <label>
+              <span data-i18n="audits.severity">Severity</span>
+              <select name="severity" required>
+                <option value="Critical" data-i18n="severity.critical">Critical</option>
+                <option value="High" data-i18n="severity.high">High</option>
+                <option value="Medium" data-i18n="severity.medium">Medium</option>
+                <option value="Low" data-i18n="severity.low">Low</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="audits.owner">Responsible Unit</span>
+              <input
+                name="owner"
+                required
+                placeholder="e.g. ICT Directorate"
+                data-i18n-placeholder="audits.ownerPlaceholder"
+              />
+            </label>
+            <label>
+              <span data-i18n="audits.dueDate">Due Date</span>
+              <input name="dueDate" type="date" required />
+            </label>
+            <label class="full">
+              <span data-i18n="audits.finding">Finding</span>
+              <textarea name="finding" rows="2" required></textarea>
+            </label>
+            <button type="submit" class="btn btn--primary" data-i18n="audits.addButton">Add audit item</button>
+          </form>
+          <div id="audit-list" class="list"></div>
+        </section>
+
+        <section class="panel panel--stacked">
+          <div class="panel__header">
+            <h2 data-i18n="training.title">Training & Change Management</h2>
+            <p class="muted" data-i18n="training.subtitle">Plan PARAE-aligned staff upskilling and adoption campaigns.</p>
+            <p class="muted small hidden" id="training-rbac-note"></p>
+          </div>
+          <form id="training-form" class="form-grid compact">
+            <label>
+              <span data-i18n="training.program">Program Name</span>
+              <input
+                name="program"
+                required
+                placeholder="e.g. Responsible AI for Public Services"
+                data-i18n-placeholder="training.programPlaceholder"
+              />
+            </label>
+            <label>
+              <span data-i18n="training.audience">Target Group</span>
+              <input
+                name="audience"
+                required
+                placeholder="e.g. 120 case officers"
+                data-i18n-placeholder="training.audiencePlaceholder"
+              />
+            </label>
+            <label>
+              <span data-i18n="training.mode">Delivery Mode</span>
+              <select name="mode" required>
+                <option value="In-person" data-i18n="training.mode.inperson">In-person</option>
+                <option value="Hybrid" data-i18n="training.mode.hybrid">Hybrid</option>
+                <option value="Virtual" data-i18n="training.mode.virtual">Virtual</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="training.target">Completion Target (%)</span>
+              <input name="target" type="number" min="1" max="100" required />
+            </label>
+            <label class="full">
+              <span data-i18n="training.objective">Adoption Objective</span>
+              <textarea name="objective" rows="2" required></textarea>
+            </label>
+            <button type="submit" class="btn btn--primary" data-i18n="training.addButton">Add training plan</button>
+          </form>
+          <div id="training-list" class="list"></div>
+        </section>
+      </div>
+
+      <section class="panel panel--stacked panel--elevated" id="section-messaging">
+        <div class="panel__header">
+          <h2 data-i18n="messaging.title">Secure Department Messaging</h2>
+          <p class="muted" data-i18n="messaging.subtitle">
+            Exchange encrypted direct messages between departments and personnel in real time.
+          </p>
+          <p class="muted small hidden" id="messaging-rbac-note"></p>
+        </div>
+        <div class="messaging-layout">
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="messaging.composeTitle">Compose message</h3>
+            </div>
+            <form id="direct-message-form" class="form-grid compact">
+              <label>
+                <span data-i18n="messaging.recipient">Recipient</span>
+                <select id="direct-message-recipient" name="recipientUserId" required></select>
+              </label>
+              <label>
+                <span data-i18n="messaging.subject">Subject</span>
+                <input
+                  name="subject"
+                  required
+                  placeholder="e.g. Compliance review follow-up"
+                  data-i18n-placeholder="messaging.subjectPlaceholder"
+                />
+              </label>
+              <label class="full">
+                <span data-i18n="messaging.message">Message</span>
+                <textarea
+                  name="message"
+                  rows="4"
+                  required
+                  placeholder="Type your secure message..."
+                  data-i18n-placeholder="messaging.messagePlaceholder"
+                ></textarea>
+              </label>
+              <button type="submit" class="btn btn--primary" data-i18n="messaging.sendButton">Send message</button>
+            </form>
+          </section>
+
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="messaging.inboxTitle">Inbox & conversation</h3>
+            </div>
+            <form id="direct-message-thread-form" class="form-grid compact">
+              <label class="full">
+                <span data-i18n="messaging.conversationWith">Conversation with</span>
+                <select id="direct-message-thread-user" name="conversationUserId"></select>
+              </label>
+            </form>
+            <div id="direct-message-inbox" class="list"></div>
+            <div id="direct-message-thread" class="list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="panel panel--stacked" id="section-documents">
+        <div class="panel__header">
+          <h2 data-i18n="documents.title">Document Upload Center</h2>
+          <p class="muted" data-i18n="documents.subtitle">
+            Upload compliance evidence, policies, and supporting records.
+          </p>
+          <p class="muted small hidden" id="documents-rbac-note"></p>
+        </div>
+        <form id="document-upload-form" class="form-grid compact">
+          <label>
+            <span data-i18n="documents.uploadTitle">Document Title</span>
+            <input
+              name="title"
+              required
+              placeholder="e.g. Q2 PARAE Evidence Bundle"
+              data-i18n-placeholder="documents.uploadTitlePlaceholder"
+            />
+          </label>
+          <label>
+            <span data-i18n="documents.category">Category</span>
+            <input
+              name="category"
+              required
+              placeholder="e.g. compliance_evidence"
+              data-i18n-placeholder="documents.categoryPlaceholder"
+            />
+          </label>
+          <label class="full">
+            <span data-i18n="documents.file">File</span>
+            <input name="documentFile" type="file" required />
+          </label>
+          <button type="submit" class="btn btn--primary" data-i18n="documents.uploadButton">Upload document</button>
+        </form>
+        <div id="documents-list" class="list"></div>
+      </section>
+
+      <section class="panel panel--stacked panel--elevated" id="section-migration">
+        <div class="panel__header">
+          <h2 data-i18n="migration.title">Digital Records Migration</h2>
+          <p class="muted" data-i18n="migration.subtitle">
+            Launch secure migration projects for government, law enforcement, hospitals, and education to digitize historical paper records.
+          </p>
+          <p class="muted small hidden" id="migration-rbac-note"></p>
+        </div>
+        <div class="split-grid">
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="migration.projectForm.title">Create migration project</h3>
+              <p class="muted" data-i18n="migration.projectForm.subtitle">
+                Define industry, retention, and classification rules before ingesting records.
+              </p>
+            </div>
+            <form id="migration-project-form" class="form-grid compact">
+              <label>
+                <span data-i18n="migration.projectForm.name">Project Name</span>
+                <input
+                  name="name"
+                  required
+                  placeholder="e.g. Historical Patient Archive Migration"
+                  data-i18n-placeholder="migration.projectForm.namePlaceholder"
+                />
+              </label>
+              <label>
+                <span data-i18n="migration.projectForm.industry">Industry</span>
+                <select name="industry" required>
+                  <option value="government" data-i18n="migration.industry.government">Government</option>
+                  <option value="law_enforcement" data-i18n="migration.industry.law_enforcement">Law Enforcement</option>
+                  <option value="hospitals" data-i18n="migration.industry.hospitals">Hospitals</option>
+                  <option value="education" data-i18n="migration.industry.education">Education</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="migration.projectForm.organization">Organization</span>
+                <input
+                  name="organization"
+                  required
+                  placeholder="e.g. National Referral Hospital"
+                  data-i18n-placeholder="migration.projectForm.organizationPlaceholder"
+                />
+              </label>
+              <label>
+                <span data-i18n="migration.projectForm.retention">Retention (years)</span>
+                <input name="retentionYears" type="number" min="1" max="100" required />
+              </label>
+              <label>
+                <span data-i18n="migration.projectForm.classification">Security Classification</span>
+                <select name="securityClassification" required>
+                  <option value="Standard" data-i18n="migration.classification.Standard">Standard</option>
+                  <option value="Restricted" data-i18n="migration.classification.Restricted">Restricted</option>
+                  <option value="Confidential" data-i18n="migration.classification.Confidential">Confidential</option>
+                </select>
+              </label>
+              <label class="full">
+                <span data-i18n="migration.projectForm.description">Project Description</span>
+                <textarea
+                  name="description"
+                  rows="2"
+                  required
+                  placeholder="Describe historical records, indexing, and compliance context."
+                  data-i18n-placeholder="migration.projectForm.descriptionPlaceholder"
+                ></textarea>
+              </label>
+              <button class="btn btn--secondary" type="submit" data-i18n="migration.projectForm.createButton">
+                Create migration project
+              </button>
+            </form>
+          </section>
+
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="migration.batchForm.title">Ingest historical batch</h3>
+              <p class="muted" data-i18n="migration.batchForm.subtitle">
+                Track digitized records, quality score, encryption, and backup verification.
+              </p>
+            </div>
+            <form id="migration-batch-form" class="form-grid compact">
+              <label>
+                <span data-i18n="migration.batchForm.project">Project</span>
+                <select id="migration-batch-project" name="projectId" required></select>
+              </label>
+              <label>
+                <span data-i18n="migration.batchForm.sourceType">Source Type</span>
+                <select name="sourceType" required>
+                  <option value="Paper" data-i18n="migration.sourceType.Paper">Paper</option>
+                  <option value="Microfilm" data-i18n="migration.sourceType.Microfilm">Microfilm</option>
+                  <option value="Mixed" data-i18n="migration.sourceType.Mixed">Mixed</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="migration.batchForm.historicalCount">Historical Records</span>
+                <input name="historicalRecordCount" type="number" min="1" required />
+              </label>
+              <label>
+                <span data-i18n="migration.batchForm.digitizedCount">Digitized Records</span>
+                <input name="digitizedRecordCount" type="number" min="0" required />
+              </label>
+              <label>
+                <span data-i18n="migration.batchForm.qualityScore">Quality Score</span>
+                <input name="qualityScore" type="number" min="0" max="99.9" step="0.1" required />
+              </label>
+              <button class="btn btn--primary" type="submit" data-i18n="migration.batchForm.ingestButton">
+                Ingest batch
+              </button>
+            </form>
+          </section>
+        </div>
+
+        <div id="migration-dashboard-grid" class="kpi-grid"></div>
+        <div id="migration-industry-grid" class="indicator-grid"></div>
+        <div class="split-grid">
+          <div id="migration-projects-list" class="list"></div>
+          <div id="migration-batches-list" class="list"></div>
+        </div>
+      </section>
+
+      <section class="panel panel--stacked panel--elevated" id="section-docops">
+        <div class="panel__header">
+          <h2 data-i18n="docOps.title">AI-Powered Document Operations</h2>
+          <p class="muted" data-i18n="docOps.subtitle">
+            OCR extraction, intelligent routing, workflow automation, collaboration, and analytics.
+          </p>
+        </div>
+
+        <div class="split-grid">
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="docOps.ocr.title">AI-Powered OCR & Intelligent Routing</h3>
+              <p class="muted" data-i18n="docOps.ocr.subtitle">
+                Extract text, classify content, and route documents to the correct department.
+              </p>
+            </div>
+            <label>
+              <span data-i18n="docOps.common.document">Document</span>
+              <select id="ops-document-select"></select>
+            </label>
+            <div class="quick-actions">
+              <button id="run-ocr-btn" type="button" class="btn btn--primary" data-i18n="docOps.ocr.runButton">
+                Run OCR & route
+              </button>
+            </div>
+            <div id="ocr-result" class="list"></div>
+            <div id="processing-list" class="list"></div>
+          </section>
+
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="docOps.workflow.title">Workflow Automation</h3>
+              <p class="muted" data-i18n="docOps.workflow.subtitle">
+                Create approval workflows and automate repetitive document decisions.
+              </p>
+              <p class="muted small hidden" id="workflow-rbac-note"></p>
+            </div>
+            <form id="workflow-template-form" class="form-grid compact">
+              <label>
+                <span data-i18n="docOps.workflow.templateName">Template Name</span>
+                <input
+                  name="name"
+                  required
+                  placeholder="e.g. Multi-stage compliance approval"
+                  data-i18n-placeholder="docOps.workflow.templateNamePlaceholder"
+                />
+              </label>
+              <label>
+                <span data-i18n="docOps.workflow.department">Department</span>
+                <select name="department" required>
+                  <option value="compliance" data-i18n="docOps.department.compliance">Compliance</option>
+                  <option value="legal" data-i18n="docOps.department.legal">Legal</option>
+                  <option value="finance" data-i18n="docOps.department.finance">Finance</option>
+                  <option value="it_security" data-i18n="docOps.department.it_security">IT Security</option>
+                  <option value="hr" data-i18n="docOps.department.hr">HR</option>
+                  <option value="operations" data-i18n="docOps.department.operations">Operations</option>
+                </select>
+              </label>
+              <label class="full">
+                <span data-i18n="docOps.workflow.steps">Steps (comma or newline separated)</span>
+                <textarea
+                  name="steps"
+                  rows="2"
+                  required
+                  placeholder="Initial Review, Manager Approval, Archive"
+                  data-i18n-placeholder="docOps.workflow.stepsPlaceholder"
+                ></textarea>
+              </label>
+              <button type="submit" class="btn btn--secondary" data-i18n="docOps.workflow.createTemplateButton">
+                Create workflow template
+              </button>
+            </form>
+
+            <form id="workflow-start-form" class="form-grid compact">
+              <label>
+                <span data-i18n="docOps.workflow.templateSelect">Template</span>
+                <select id="workflow-template-select" name="templateId" required></select>
+              </label>
+              <button type="submit" class="btn btn--primary" data-i18n="docOps.workflow.startRunButton">
+                Start workflow run
+              </button>
+            </form>
+
+            <form id="workflow-advance-form" class="form-grid compact">
+              <label>
+                <span data-i18n="docOps.workflow.runSelect">Workflow Run</span>
+                <select id="workflow-run-select" name="runId" required></select>
+              </label>
+              <label>
+                <span data-i18n="docOps.workflow.action">Action</span>
+                <select name="action" required>
+                  <option value="approve" data-i18n="docOps.workflow.actionApprove">Approve</option>
+                  <option value="reject" data-i18n="docOps.workflow.actionReject">Reject</option>
+                </select>
+              </label>
+              <label class="full">
+                <span data-i18n="docOps.workflow.comment">Comment</span>
+                <textarea name="comment" rows="2"></textarea>
+              </label>
+              <button type="submit" class="btn btn--secondary" data-i18n="docOps.workflow.advanceRunButton">
+                Apply action
+              </button>
+            </form>
+
+            <div id="workflow-runs-list" class="list"></div>
+          </section>
+        </div>
+
+        <div class="split-grid">
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="docOps.collab.title">Real-time Collaboration & Versioning</h3>
+              <p class="muted" data-i18n="docOps.collab.subtitle">
+                Collaborate with comments, version control, and immutable audit trails.
+              </p>
+            </div>
+            <form id="document-version-form" class="form-grid compact">
+              <label class="full">
+                <span data-i18n="docOps.collab.versionFile">Upload New Version</span>
+                <input name="versionFile" type="file" required />
+              </label>
+              <button type="submit" class="btn btn--secondary" data-i18n="docOps.collab.uploadVersionButton">
+                Upload version
+              </button>
+            </form>
+            <form id="collaboration-form" class="form-grid compact">
+              <label class="full">
+                <span data-i18n="docOps.collab.comment">Comment</span>
+                <textarea
+                  name="message"
+                  rows="2"
+                  required
+                  placeholder="Add context for your team..."
+                  data-i18n-placeholder="docOps.collab.commentPlaceholder"
+                ></textarea>
+              </label>
+              <button type="submit" class="btn btn--primary" data-i18n="docOps.collab.addCommentButton">
+                Add comment
+              </button>
+            </form>
+            <div id="document-versions-list" class="list"></div>
+            <div id="collaboration-comments-list" class="list"></div>
+            <div id="audit-trail-list" class="list"></div>
+          </section>
+
+          <section class="panel panel--stacked">
+            <div class="panel__header">
+              <h3 data-i18n="docOps.analytics.title">Advanced Analytics & Secure Storage</h3>
+              <p class="muted" data-i18n="docOps.analytics.subtitle">
+                Monitor OCR quality, routing efficiency, automation rates, and compliance controls.
+              </p>
+            </div>
+            <div class="quick-actions">
+              <button
+                id="refresh-analytics-btn"
+                type="button"
+                class="btn btn--secondary"
+                data-i18n="docOps.analytics.refreshButton"
+              >
+                Refresh analytics
+              </button>
+            </div>
+            <div id="analytics-grid" class="kpi-grid"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="panel" id="section-indicators">
+        <div class="panel__header">
+          <h2 data-i18n="indicators.title">Cybersecurity Governance & Workflow Automation Indicators</h2>
+          <p class="muted" data-i18n="indicators.subtitle">Control posture and automation outcomes for executives.</p>
+        </div>
+        <div class="indicator-grid" id="indicator-grid"></div>
+      </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <p data-i18n="footer.text">
+        Eclair Technology Assistance - Trusted partner for AI digital transformation,
+        compliance execution, and institutional capacity development.
+      </p>
+    </footer>
+
+    <div id="toast-root" aria-live="polite" class="toast-root"></div>
+
     <script type="module" src="app.js"></script>
   </body>
 </html>
