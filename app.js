@@ -161,27 +161,71 @@ function render() {
 
 function renderAuth() {
   return `
-    <section class="card">
-      <h2>Project Overview</h2>
-      <p class="muted">
-        SuSu Konnect digitizes traditional community-based savings practices (SuSu, Tanda, Chit Fund,
-        Partner, Sou-Sou, ROSCA) widely used across African, Latino, Asian and Caribbean communities.
-      </p>
-      <p class="muted"><strong>The platform's goal is to:</strong></p>
-      <ul class="list-compact">
-        <li>Preserve trust-based group savings</li>
-        <li>Add transparency, automation, and security</li>
-        <li>Eliminate confusion, fraud, and informal disputes</li>
-        <li>Enable safe, verifiable monthly contributions and payouts</li>
-      </ul>
-      <p class="muted">
-        Because the app handles real money and collective trust, security, transparency, and
-        accountability are core - not optional.
-      </p>
+    <section class="hero-shell">
+      <div class="hero-content">
+        <span class="eyebrow">Secure ROSCA, SuSu, Tanda and Chit Fund management</span>
+        <h1>Digitize community savings without losing community trust.</h1>
+        <p>
+          SusuKonnect preserves trusted group savings while adding transparent ledgers,
+          automated reminders, MFA-protected approvals, KYC verification, audit logs,
+          and documented in-app communication.
+        </p>
+        <div class="hero-actions">
+          <a class="btn-primary hero-link" href="#login-form">Try the secure demo</a>
+          <a class="btn-secondary hero-link" href="#register-form">Create an account</a>
+        </div>
+        <div class="trust-strip">
+          <span>KYC before joining or payouts</span>
+          <span>Tokenized payment records</span>
+          <span>Immutable audit trail</span>
+        </div>
+      </div>
+      <div class="hero-card">
+        <img src="assets/susukonnect-mark.svg" alt="" class="hero-mark" />
+        <h2>Monthly circle snapshot</h2>
+        <div class="mini-ledger">
+          <div><span>Paid</span><strong>4 members</strong></div>
+          <div><span>Pending</span><strong>1 member</strong></div>
+          <div><span>Payout</span><strong>MFA gated</strong></div>
+        </div>
+        <p class="small muted">
+          Every payment, payout approval, dispute, and admin decision is timestamped
+          so members and leaders can resolve questions from one shared record.
+        </p>
+      </div>
+    </section>
+
+    <section class="feature-grid">
+      <article class="feature-card">
+        <h3>Members</h3>
+        <p>Join verified circles, contribute monthly, request eligible payouts, and communicate privately in group chat.</p>
+      </article>
+      <article class="feature-card">
+        <h3>Group Leaders</h3>
+        <p>Create groups, set contribution rules, approve members, coordinate payout order, and moderate announcements.</p>
+      </article>
+      <article class="feature-card">
+        <h3>Platform Admins</h3>
+        <p>Review KYC, monitor fraud flags, resolve disputes, export reports, and inspect hash-linked audit logs.</p>
+      </article>
+    </section>
+
+    <section class="card auth-card">
+      <div class="section-heading">
+        <div>
+          <h2>Launch the working demo</h2>
+          <p class="muted">
+            Use seeded accounts to test onboarding, groups, payments, payouts, chat,
+            calendar notifications, security settings, and admin oversight.
+          </p>
+        </div>
+        <button type="button" class="btn-secondary" data-action="reset-demo-data">Reset demo data</button>
+      </div>
+
       <div class="auth-grid">
-        <article class="card">
+        <article class="card elevated">
           <h3>Sign In</h3>
-          <p class="small muted">MFA is enforced for new-device and sensitive activity.</p>
+          <p class="small muted">MFA is enforced for new-device and sensitive activity. Demo MFA codes appear in the modal.</p>
           <form id="login-form" class="form-grid">
             <div class="form-field full">
               <label for="login-email">Email</label>
@@ -198,14 +242,23 @@ function renderAuth() {
               </button>
             </div>
           </form>
-          <div class="timeline small">
-            <div class="timeline-item"><strong>Admin:</strong> admin@susukonnect.app / Admin@2026</div>
-            <div class="timeline-item"><strong>Leader:</strong> leader@susukonnect.app / Leader@2026</div>
-            <div class="timeline-item"><strong>Member:</strong> member@susukonnect.app / Member@2026</div>
+          <div class="demo-credentials">
+            <button type="button" class="demo-login-card" data-action="fill-demo-login" data-email="admin@susukonnect.app" data-password="Admin@2026">
+              <strong>Admin</strong>
+              <span>KYC queue, fraud monitoring, dispute controls, reports</span>
+            </button>
+            <button type="button" class="demo-login-card" data-action="fill-demo-login" data-email="leader@susukonnect.app" data-password="Leader@2026">
+              <strong>Leader</strong>
+              <span>Create groups, approve members, reminders, payout approvals</span>
+            </button>
+            <button type="button" class="demo-login-card" data-action="fill-demo-login" data-email="member@susukonnect.app" data-password="Member@2026">
+              <strong>Member</strong>
+              <span>Pay contributions, request payouts, chat, notifications</span>
+            </button>
           </div>
         </article>
 
-        <article class="card">
+        <article class="card elevated">
           <h3>Create Account</h3>
           <p class="small muted">
             Terms acceptance is mandatory before account creation.
@@ -246,6 +299,20 @@ function renderAuth() {
           </form>
         </article>
       </div>
+    </section>
+
+    <section class="module-map">
+      <article>
+        <h3>Core modules included</h3>
+        <ul class="list-compact">
+          <li>Email/phone signup, password auth, biometric simulation, MFA, and terms acceptance</li>
+          <li>KYC package submission with government ID, DOB, selfie token, and optional address tokenization</li>
+          <li>Group search, private invite links, leader approvals, contribution rules, and payout logic</li>
+          <li>Manual and auto-debit contribution records with grace periods and late alerts</li>
+          <li>Payout requests with reasons, leader/admin approvals, recipient MFA, fees, and cycle rollover</li>
+          <li>Calendar reminders, notifications, group chat, pinned announcements, disputes, and admin exports</li>
+        </ul>
+      </article>
     </section>
   `;
 }
@@ -1826,6 +1893,12 @@ function handleClick(event) {
       case "biometric-login":
         biometricLogin();
         return;
+      case "fill-demo-login":
+        fillDemoLogin(button.dataset.email, button.dataset.password);
+        return;
+      case "reset-demo-data":
+        resetDemoData();
+        return;
       default:
         break;
     }
@@ -1843,6 +1916,33 @@ function handleChange(event) {
       render();
     }
   });
+}
+
+function fillDemoLogin(email, password) {
+  const emailInput = document.getElementById("login-email");
+  const passwordInput = document.getElementById("login-password");
+  if (emailInput instanceof HTMLInputElement) {
+    emailInput.value = email || "";
+  }
+  if (passwordInput instanceof HTMLInputElement) {
+    passwordInput.value = password || "";
+    passwordInput.focus();
+  }
+  showToast("Demo credentials filled. Submit to continue.", "success");
+}
+
+function resetDemoData() {
+  if (!window.confirm("Reset local demo data and sign out?")) {
+    return;
+  }
+  state.data = ensureDataShape(createSeedData());
+  state.session = null;
+  clearSession();
+  persistData();
+  state.activeTab = "dashboard";
+  state.selectedChatGroupId = null;
+  showToast("Demo data reset.", "success");
+  render();
 }
 
 function handleLogin(form) {
@@ -3108,6 +3208,30 @@ function exportAuditLog() {
   showToast("Audit log exported.", "success");
 }
 
+function fillDemoLogin(email, password) {
+  const emailInput = document.getElementById("login-email");
+  const passwordInput = document.getElementById("login-password");
+  if (emailInput instanceof HTMLInputElement) {
+    emailInput.value = email || "";
+  }
+  if (passwordInput instanceof HTMLInputElement) {
+    passwordInput.value = password || "";
+    passwordInput.focus();
+  }
+  showToast("Demo credentials filled. Submit to continue.", "success");
+}
+
+function resetDemoData() {
+  state.data = ensureDataShape(createSeedData());
+  state.session = null;
+  state.activeTab = "dashboard";
+  state.selectedChatGroupId = null;
+  clearSession();
+  persistData();
+  showToast("Demo data reset to the seeded SusuKonnect workflow.", "success");
+  render();
+}
+
 function handleMfaSubmit(event) {
   event.preventDefault();
   withUiGuard("MFA submit", () => {
@@ -3199,6 +3323,7 @@ function synchronizeData() {
     }
   });
 
+  dirty = reconcilePayoutStatuses() || dirty;
   dirty = refreshLateContributionStatuses() || dirty;
   dirty = generateAutoReminders() || dirty;
   dirty = updateUserMetrics() || dirty;
@@ -3206,6 +3331,25 @@ function synchronizeData() {
   if (dirty) {
     persistData();
   }
+}
+
+function reconcilePayoutStatuses() {
+  let changed = false;
+  state.data.payouts.forEach((payout) => {
+    if (payout.status === "released" || payout.status === "rejected") {
+      return;
+    }
+    const group = findGroupById(payout.groupId);
+    if (!group) {
+      return;
+    }
+    const previousStatus = payout.status;
+    updatePayoutApprovalStatus(group, payout);
+    if (payout.status !== previousStatus) {
+      changed = true;
+    }
+  });
+  return changed;
 }
 
 function refreshLateContributionStatuses() {
