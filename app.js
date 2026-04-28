@@ -3208,30 +3208,6 @@ function exportAuditLog() {
   showToast("Audit log exported.", "success");
 }
 
-function fillDemoLogin(email, password) {
-  const emailInput = document.getElementById("login-email");
-  const passwordInput = document.getElementById("login-password");
-  if (emailInput instanceof HTMLInputElement) {
-    emailInput.value = email || "";
-  }
-  if (passwordInput instanceof HTMLInputElement) {
-    passwordInput.value = password || "";
-    passwordInput.focus();
-  }
-  showToast("Demo credentials filled. Submit to continue.", "success");
-}
-
-function resetDemoData() {
-  state.data = ensureDataShape(createSeedData());
-  state.session = null;
-  state.activeTab = "dashboard";
-  state.selectedChatGroupId = null;
-  clearSession();
-  persistData();
-  showToast("Demo data reset to the seeded SusuKonnect workflow.", "success");
-  render();
-}
-
 function handleMfaSubmit(event) {
   event.preventDefault();
   withUiGuard("MFA submit", () => {
